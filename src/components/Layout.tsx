@@ -1,16 +1,12 @@
 import type { ReactNode } from 'react'
-import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { useEffect } from 'react'
+import { Link, Navigate, Outlet, useLocation, useNavigate, useNavigationType, useParams } from 'react-router-dom'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useStore } from '../lib/store'
 import { Button, FeedbackHost, confirmAsync, toast } from './ui'
 
 export function AppLayout() {
   useGradingTicker()
-  const { pathname } = useLocation()
-  // 화면을 옮길 때마다 맨 위에서 시작 (이전 화면의 스크롤 위치가 남아 화면이 튀는 것 방지)
-  useEffect(() => {
-    window.scrollTo(0, 0)
-  }, [pathname])
+  useScrollMemory()
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
@@ -175,4 +171,41 @@ function useGradingTicker() {
     }, 450)
     return () => clearInterval(t)
   }, [running, tick])
+}
+
+/**
+ * 화면 이동 시 스크롤 처리
+ * - 기본: 새 화면은 맨 위에서 시작 (이전 화면의 스크롤 위치가 남아 화면이 튀는 것 방지)
+ * - 하위 화면(학생 채점 상세 등)에서 목록으로 돌아오거나 브라우저 뒤로가기를 하면, 떠날 때의 스크롤 위치를 복원
+ */
+function useScrollMemory() {
+  const { pathname } = useLocation()
+  const navType = useNavigationType()
+  const memo = useRef(new Map<string, number>())
+  const prevPath = useRef(pathname)
+  const lastY = useRef(0)
+
+  useEffect(() => {
+    const on = () => { lastY.current = window.scrollY }
+    // 화면이 바뀌기 직전(링크 클릭·뒤로가기)의 스크롤 위치를 정확히 기록 (스크롤 이벤트만으로는 놓칠 수 있음)
+    window.addEventListener('scroll', on, { passive: true })
+    document.addEventListener('click', on, true)
+    window.addEventListener('popstate', on)
+    return () => {
+      window.removeEventListener('scroll', on)
+      document.removeEventListener('click', on, true)
+      window.removeEventListener('popstate', on)
+    }
+  }, [])
+
+  useLayoutEffect(() => {
+    const from = prevPath.current
+    if (from === pathname) return
+    memo.current.set(from, lastY.current)
+    prevPath.current = pathname
+    const returningFromChild = from.startsWith(`${pathname}/`)
+    const y = (returningFromChild || navType === 'POP') ? (memo.current.get(pathname) ?? 0) : 0
+    window.scrollTo(0, y)
+    lastY.current = y
+  }, [pathname, navType])
 }

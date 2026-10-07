@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { PDFDocument } from 'pdf-lib'
 import { EvalShell, PageContainer, TitleBar, useEvalParam } from '../../components/Layout'
 import { AnswerViewer } from '../../components/Sheet'
-import { Badge, Button, Checkbox, EmptyState, Modal, NumberInput, Radio, SectionHeader, Spinner, Well, inputCls, toast } from '../../components/ui'
+import { Badge, Button, Checkbox, Chevron, EmptyState, Modal, NumberInput, Radio, SectionHeader, Spinner, Well, inputCls, toast } from '../../components/ui'
 import { taskTitle } from '../../lib/problemGen'
 import { putBlob, setPendingPdf, takePendingPdf } from '../../lib/files'
 import { nowStr, useStore } from '../../lib/store'
@@ -26,6 +26,7 @@ export default function Submissions() {
   const targets = useTargetStudents()
   const [editFor, setEditFor] = useState<Student | null>(null)
   const [viewFor, setViewFor] = useState<Student | null>(null)
+  const [closed, setClosed] = useState<Record<string, boolean>>({})
   const pdfInput = useRef<HTMLInputElement>(null)
   if (!design) return null
   const key = (s: Student) => `${design.id}:${s.id}`
@@ -69,29 +70,48 @@ export default function Submissions() {
           <Well>
             <div className="rounded-2xl bg-white p-5">
               <h3 className="mb-4 text-[17px] font-medium">{taskTitle(design)}</h3>
-              <table className="table-base">
-                <thead>
-                  <tr><th>상태</th><th>학번</th><th>이름</th><th>제출 방식</th><th>최근 제출 일시</th><th>파일 수</th><th>제출 내용</th><th>과제 제출 관리</th></tr>
-                </thead>
-                <tbody>
-                  {targets.map((s) => {
-                    const sub = submissions[key(s)]
-                    const last = sub?.files[sub.files.length - 1]
-                    return (
-                      <tr key={s.id}>
-                        <td>{sub ? <Badge tone="blue">제출</Badge> : <Badge tone="red">미제출</Badge>}</td>
-                        <td>{studentNo(s)}</td>
-                        <td>{s.name}</td>
-                        <td>{!sub ? '-' : sub.textSource === 'typed' ? <Badge tone="orange">직접 입력</Badge> : <Badge tone="purple">파일 · OCR</Badge>}</td>
-                        <td className="text-gray-700">{last ? `${last.uploadedAt} ${last.by} 업로드` : '-'}</td>
-                        <td>{sub?.files.length ?? 0}</td>
-                        <td>{sub ? <button type="button" className="font-medium text-brand-600 hover:underline" onClick={() => setViewFor(s)}>내용 확인</button> : '-'}</td>
-                        <td><button type="button" className="font-medium text-brand-600 hover:underline" onClick={() => setEditFor(s)}>제출 관리</button></td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+              <div className="space-y-3">
+                {[...targets.reduce((m, st) => m.set(`${st.grade}학년 ${st.cls}반`, [...(m.get(`${st.grade}학년 ${st.cls}반`) ?? []), st]), new Map<string, Student[]>())].map(([groupKey, list]) => {
+                  const open = !closed[groupKey]
+                  const done = list.filter((st) => submissions[key(st)]).length
+                  return (
+                    <div key={groupKey} className="rounded-xl border border-gray-200">
+                      <button type="button" aria-expanded={open} onClick={() => setClosed({ ...closed, [groupKey]: open })} className="flex w-full items-center gap-3 px-4 py-3 text-left">
+                        <span className="flex h-6 w-6 items-center justify-center rounded text-brand-500"><Chevron open={open} /></span>
+                        <span className="font-medium">{groupKey}</span>
+                        <span className="ml-auto text-sm text-gray-600">{list.length}명 · 제출 {done}/{list.length}</span>
+                      </button>
+                      {open && (
+                        <div className="overflow-x-auto border-t px-4 pb-3 pt-1">
+                          <table className="table-base">
+                            <thead>
+                              <tr><th>상태</th><th>학번</th><th>이름</th><th>제출 방식</th><th>최근 제출 일시</th><th>파일 수</th><th>제출 내용</th><th>과제 제출 관리</th></tr>
+                            </thead>
+                            <tbody>
+                              {list.map((st) => {
+                                const sub = submissions[key(st)]
+                                const last = sub?.files[sub.files.length - 1]
+                                return (
+                                  <tr key={st.id}>
+                                    <td>{sub ? <Badge tone="blue">제출</Badge> : <Badge tone="red">미제출</Badge>}</td>
+                                    <td>{studentNo(st)}</td>
+                                    <td>{st.name}</td>
+                                    <td>{!sub ? '-' : sub.textSource === 'typed' ? <Badge tone="orange">직접 입력</Badge> : <Badge tone="purple">파일 · OCR</Badge>}</td>
+                                    <td className="text-gray-700">{last ? `${last.uploadedAt} ${last.by} 업로드` : '-'}</td>
+                                    <td>{sub?.files.length ?? 0}</td>
+                                    <td>{sub ? <button type="button" className="font-medium text-brand-600 hover:underline" onClick={() => setViewFor(st)}>내용 확인</button> : '-'}</td>
+                                    <td><button type="button" className="font-medium text-brand-600 hover:underline" onClick={() => setEditFor(st)}>제출 관리</button></td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           </Well>
         </>
