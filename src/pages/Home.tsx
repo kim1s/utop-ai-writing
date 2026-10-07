@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { CopyModal, LibraryPickModal } from '../components/PickModals'
-import { PageContainer, TitleBar } from '../components/Layout'
+import { PageContainer } from '../components/Layout'
 import { Badge, Button, Card, EmptyState, Select, confirmAsync, toast } from '../components/ui'
 import { CURRENT_YEAR } from '../lib/seed'
 import { useStore } from '../lib/store'
@@ -38,7 +38,6 @@ export default function Home() {
 
   return (
     <>
-      <TitleBar title="나의 평가" />
       <PageContainer>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-xl font-semibold">📘 나의 평가 목록</h2>
