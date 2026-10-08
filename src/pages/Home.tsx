@@ -14,7 +14,6 @@ const SEM_OPTIONS = [
   { value: `${CURRENT_YEAR - 1}-1`, label: `${CURRENT_YEAR - 1}학년도 1학기` },
 ]
 
-const CARD_COLORS: Record<string, string> = { 통합과학: 'bg-brand-500', 과학: 'bg-sky-500', 국어: 'bg-emerald-500', 영어: 'bg-orange-400', 수학: 'bg-indigo-500', 통합사회: 'bg-rose-400' }
 
 export default function Home() {
   const nav = useNavigate()
@@ -76,9 +75,9 @@ export default function Home() {
                 const run = runs[d.id]
                 return (
                   <div key={d.id} className="relative flex overflow-hidden rounded-xl border border-gray-200 bg-white transition hover:shadow-md">
-                    <div className={`flex w-[30%] items-center justify-center p-3 text-center text-lg font-bold text-white ${CARD_COLORS[d.subject] ?? 'bg-brand-500'}`}>{d.subject}</div>
                     <button type="button" className="min-w-0 flex-1 p-4 text-left" onClick={() => open(d.id)}>
                       <div className="mb-2 flex flex-wrap gap-1.5">
+                        <Badge tone="orange">{d.subject}</Badge>
                         <Badge tone="purple">{d.year} · {d.semester}학기</Badge>
                         <Badge tone="gray">{d.schoolLevel} {d.grade}학년</Badge>
                         {d.status === 'draft' ? <Badge tone="orange">임시저장</Badge> : run?.state === 'done' ? <Badge tone="green">AI 채점 완료</Badge> : run?.state === 'running' ? <Badge tone="purple">채점 중</Badge> : <Badge tone="gray">채점 전</Badge>}
