@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware'
 import { blankDesign } from './blank'
 import { emptyScore, simulateAiScore, simulateOcrText } from './grading'
 import { CURRENT_YEAR, ME, SAMPLE_CRITERIA, SAMPLE_LIBRARY, SEED_NOTICES, SEED_STUDENTS, SEED_TEACHERS } from './seed'
+import { generateSeteuk } from './seteuk'
 import { MIDDLE_ENGLISH } from '../data/middleEnglishAchievements'
 import type { Design, GradingRun, LibraryItem, Notice, Student, StudentScore, Submission, SubmissionFile, Teacher } from './types'
 
@@ -65,6 +66,9 @@ function baseData(): Data {
   }
 }
 
+/** AI 채점 결과에 AI 세특을 함께 붙인다 (이미 있으면 유지) */
+const withSeteuk = (design: Design, sc: StudentScore, text: string): StudentScore => ({ ...sc, seteuk: sc.seteuk ?? generateSeteuk(design, sc, text) })
+
 export const DEMO_DESIGN_ID = 'd-demo-1'
 
 function demoData(): Data {
@@ -74,14 +78,12 @@ function demoData(): Data {
     id: DEMO_DESIGN_ID,
     name: '1학기 중간 서술형 1-1반',
     problem: {
-      title: 'Should Our School Reduce Waste?',
-      description: '수업 시간에 배운 "Unit 5. Think Green, Live Green" 단원을 떠올려 보세요. 우리 학교에서 쓰레기를 줄여야 하는지에 대한 자신의 의견을 주장하고, 이유를 들어 영어로 작성하세요.',
-      length: '6~8문장 (약 60~80 단어)',
+      topic: '학교에서 쓰레기를 줄여야 하는지에 대한 자신의 의견 쓰기',
+      format: '의견을 주장하는 글',
+      contents: ['자신의 입장(찬성 또는 반대)', '이유 두 가지 이상', '마무리 문장'],
       grammar: ['조동사 should', '접속사 because'],
-      sheet: [
-        { id: 'b1', type: 'text', content: '[Reading Material]\nEvery day, our school throws away a lot of paper cups and plastic bottles. Some students say it is only a small problem, but others think we should act now.' },
-        { id: 'b2', type: 'question', content: 'Should our school reduce waste? Write your opinion and give at least two reasons. Write 6-8 sentences.' },
-      ],
+      length: '각 문장은 3단어 이상, 전체 글은 60단어 이상을 포함할 것',
+      etc: ['한국어 사용 금지', '주어와 동사가 있는 문법에 맞는 문장을 작성할 것', '철자 및 어법 오류에 주의할 것'],
     },
     schoolLevel: '중',
     grade: 1,
@@ -129,7 +131,8 @@ function demoData(): Data {
   submitted.forEach((sid, i) => {
     const key = `${design.id}:${sid}`
     const ai = simulateAiScore(design, sid, submissions[key].text)
-    scores[key] = i < 8 ? { ...ai, picks: [...ai.aiPicks], done: true } : ai
+    const sc: StudentScore = i < 8 ? { ...ai, picks: [...ai.aiPicks], done: true } : ai
+    scores[key] = withSeteuk(design, sc, submissions[key].text ?? '')
   })
   const runs = { [design.id]: { state: 'done' as const, progress: submitted.length } }
   return { ...baseData(), students, designs: [design, second], submissions, scores, runs }
@@ -282,9 +285,10 @@ export const useStore = create<Data & Actions>()(
         if (sid) {
           const key = `${designId}:${sid}`
           const old = scores[key]
-          const ai = simulateAiScore(design, sid, s.submissions[key]?.text)
+          const text = s.submissions[key]?.text ?? ''
+          const ai = withSeteuk(design, simulateAiScore(design, sid, text), text)
           // 교사가 이미 확정한 채점은 보존, AI 제안만 갱신
-          scores[key] = old?.done ? { ...old, aiPicks: ai.aiPicks, evidenceAnalysis: ai.evidenceAnalysis, evidenceRubric: ai.evidenceRubric, correction: old.correction ?? ai.correction } : ai
+          scores[key] = old?.done ? { ...old, aiPicks: ai.aiPicks, evidence: ai.evidence, correction: old.correction ?? ai.correction, seteuk: old.seteuk ?? ai.seteuk } : ai
         }
         set({
           scores,
@@ -304,6 +308,6 @@ export const useStore = create<Data & Actions>()(
       resetEmpty: () => set({ ...baseData() }),
       loadDemo: () => set({ ...demoData() }),
     }),
-    { name: 'utop-ai-writing-v9', version: 9 },
+    { name: 'utop-ai-writing-v12', version: 12 },
   ),
 )

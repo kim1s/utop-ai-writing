@@ -1,79 +1,117 @@
 import { findUnit, type TextbookSpecial, type TextbookUnit } from '../data/middleEnglishTextbooks'
-import { uid } from './store'
 import type { Criterion, Design, Problem } from './types'
 
 const isUnit = (x: TextbookUnit | TextbookSpecial): x is TextbookUnit => 'thinkAndWrite' in x
 
-export const hasProblem = (p?: Problem) => !!p && !!(p.title.trim() || p.description.trim() || p.sheet.length || p.grammar.length)
+export const emptyProblem = (): Problem => ({ topic: '', format: '', contents: [], grammar: [], length: '', etc: [] })
 
-/** 학생에게 보여 주는 과제명. 문제가 없으면 평가명을 사용 */
-export const taskTitle = (d: Pick<Design, 'name' | 'problem'>) => d.problem?.title.trim() || d.name
+export const hasProblem = (p?: Problem) => !!p && !!(p.topic.trim() || p.format.trim() || p.contents.length || p.grammar.length || p.length.trim() || p.etc.length)
 
-export const emptyProblem = (): Problem => ({ title: '', description: '', length: '', grammar: [], sheet: [] })
+/** 학생 결과물에 붙는 과제 이름. 과제 조건의 주제를 쓰고, 없으면 평가명을 쓴다 */
+export const taskTitle = (d: Pick<Design, 'name' | 'problem'>) => d.problem?.topic.trim() || d.name
 
-const lengthFor = (grade: number) => (grade <= 1 ? '5~7문장 (약 50~70 단어)' : grade === 2 ? '6~8문장 (약 70~90 단어)' : '8~10문장 (약 90~120 단어)')
+/** 학년 수준에 맞춘 기본 분량 조건 */
+const lengthFor = (grade: number) => {
+  const [w, total] = grade <= 1 ? [3, 50] : grade === 2 ? [4, 70] : [5, 90]
+  return `각 문장은 ${w}단어 이상, 전체 글은 ${total}단어 이상을 포함할 것`
+}
+
+const DEFAULT_ETC = ['한국어 사용 금지', '주어와 동사가 있는 문법에 맞는 문장을 작성할 것', '철자 및 어법 오류에 주의할 것']
+
+/** 활동 설명에서 글의 형식을 짐작한다 (예: "감사 카드 쓰기" → 카드/편지글) */
+function guessFormat(desc: string): string {
+  if (/카드|편지/.test(desc)) return '편지글(카드)'
+  if (/일기|기행문/.test(desc)) return '일기·기행문'
+  if (/후기|리뷰|독후감/.test(desc)) return '후기글'
+  if (/주장|의견|입장/.test(desc)) return '의견을 주장하는 글'
+  if (/소개|설명/.test(desc)) return '소개하는 글'
+  if (/규칙|지원서|홍보/.test(desc)) return '실용문'
+  return '자유 형식의 글'
+}
+
+/** 성취기준 문장에서 글의 형식을 짐작한다 (교과서 활동에서 짐작한 형식보다 우선) */
+function formatFromAchievement(text: string): string | null {
+  if (/주장|의견/.test(text)) return '의견을 주장하는 글'
+  if (/요약/.test(text)) return '요약문'
+  if (/일기|편지|이메일/.test(text)) return '편지·일기·이메일 등의 글'
+  if (/경험|계획/.test(text)) return '경험이나 계획을 설명하는 글'
+  if (/묘사/.test(text)) return '묘사하는 글'
+  if (/설명/.test(text)) return '설명하는 글'
+  return null
+}
+
+const short = (t: string, n = 40) => (t.length > n ? `${t.slice(0, n).trim()}…` : t)
 
 /**
- * AI 문제 생성 시뮬레이션: 성취기준 + 교과서 단원 정보를 바탕으로 영어 라이팅 과제를 만든다.
+ * AI 과제 조건 생성 시뮬레이션: 교과서 단원 내용 + 선생님이 선택한 성취기준을 바탕으로 만든다.
+ * - 교과서 단원: 주제(Think and Write 활동), 필수 문법(Language Use), 핵심 표현
+ * - 성취기준: 글의 형식, 필수 포함 내용(성취기준이 요구하는 수행)
  * 실제 생성형 AI API를 붙일 때 이 함수를 교체하면 된다.
  */
-const lengthEn = (grade: number) => (grade <= 1 ? '5-7 sentences' : grade === 2 ? '6-8 sentences' : '8-10 sentences')
-
 export function generateProblem(d: Design): Problem {
   const unit = findUnit(d.textbookId, d.unitId)
-  const ach = d.achievements.find((a) => a.text.trim())
+  const achs = d.achievements.filter((a) => a.text.trim())
   const length = lengthFor(d.grade)
-  const block = (type: 'text' | 'question', content: string) => ({ id: uid('b'), type, content })
+  const achContents = achs.map((a) => `성취기준 반영: ${short(a.text.replace(/[.。]$/, ''))}`)
+  const achFormat = achs.map((a) => formatFromAchievement(a.text)).find(Boolean) ?? null
 
   if (unit && isUnit(unit)) {
     const t = unit.thinkAndWrite
     return {
-      title: t.title,
-      description: `수업 시간에 배운 "${unit.label}. ${unit.title}" 단원의 내용을 바탕으로 다음 과제를 수행해 보세요.\n과제: ${t.desc}. 아래 자료를 참고하여 영어로 작성하세요.`,
+      topic: t.desc,
+      format: achFormat ?? guessFormat(t.desc),
+      contents: [`"${unit.title}" 단원에서 배운 핵심 표현 활용하기`, ...achContents, '마무리 문장 쓰기'],
+      grammar: [...unit.languageUse],
       length,
-      grammar: unit.languageUse,
-      sheet: [
-        block('text', `[Reading Material]\nLast week, our class read about "${unit.read.title}". It gave us many ideas and new expressions.\nRemember the key sentences and the story as you write.\n(참고: ${unit.read.desc})`),
-        block('question', `Write about "${t.title}" in English. (${t.desc})\n- Use the key expressions you learned in this unit.\n- Write ${lengthEn(d.grade)}.`),
-        block('question', `Underline the grammar you used: ${unit.languageUse.join(', ')}`),
-      ],
+      etc: DEFAULT_ETC,
     }
   }
   if (unit) {
     return {
-      title: unit.title,
-      description: `${unit.label}에서 읽은 내용을 떠올려 보세요. ${unit.desc}. 읽은 내용에 대한 나의 생각과 느낌을 영어로 작성하세요.`,
-      length,
+      topic: `${unit.desc}에 대한 나의 생각과 느낌 쓰기`,
+      format: achFormat ?? '감상문',
+      contents: ['읽은 내용 간단히 소개하기', ...achContents, '나의 생각과 그렇게 생각한 이유'],
       grammar: [],
-      sheet: [
-        block('text', `[Reading Material]\nYou read "${unit.title}" in class. Think about the most interesting part.`),
-        block('question', `Write about what you learned and how you felt. Write ${lengthEn(d.grade)}.`),
-      ],
+      length,
+      etc: DEFAULT_ETC,
     }
   }
-  const topic = ach ? ach.text.replace(/[.。]$/, '') : '자신이 알고 있는 주제'
+  const text = achs[0] ? achs[0].text.replace(/[.。]$/, '') : '자신이 알고 있는 주제'
   return {
-    title: ach ? `Writing Task (${ach.code || 'Free Topic'})` : 'Writing Task',
-    description: ach ? `성취기준 "${topic}"을(를) 달성했는지 확인하는 과제입니다. 주어진 상황을 읽고 영어로 글을 작성해 보세요.` : '주어진 상황을 읽고 영어로 글을 작성해 보세요.',
-    length,
+    topic: achs[0] ? `성취기준("${text}")을 달성하는 영어 글쓰기` : '주어진 상황에 대해 영어로 글쓰기',
+    format: achFormat ?? '자유 형식의 글',
+    contents: achContents.length ? [...achContents, '이유나 근거 두 가지 이상', '마무리 문장'] : ['자신의 생각이나 주장', '이유나 근거 두 가지 이상', '마무리 문장'],
     grammar: [],
-    sheet: [
-      block('text', '[Situation]\nYour school is preparing a class event. Your teacher asks every student to share an idea.'),
-      block('question', `Write your idea and give reasons. Write ${lengthEn(d.grade)}.`),
-    ],
+    length,
+    etc: DEFAULT_ETC,
   }
 }
 
 /**
- * AI 채점기준 생성 시뮬레이션.
- * - 문제가 있으면: 분량·필수 문법·과제 수행 여부가 채점기준에 반영된다.
- * - 문제가 없으면: 기본 정보(학년·교과서 단원)와 성취기준만 반영한다.
+ * AI 채점기준 생성 시뮬레이션: 교과서 단원 + 선생님이 선택한 성취기준 + 과제 조건을 바탕으로 만든다.
+ * - 성취기준: 성취수준(상/중/하)별 채점요소
+ * - 교과서 단원: 단원의 의사소통 기능·읽기 글을 활용했는지
+ * - 과제 조건: 주제·형식·필수 포함 내용·필수 문법·분량·기타 조건 충족 여부
+ * (과제 조건이 비어 있으면 교과서 단원과 성취기준만 반영한다)
  */
 export function generateCriteria(d: Design): Criterion[] {
   const ach = d.achievements.filter((a) => a.text.trim() || a.levels.some((l) => l.text.trim()))
   const unit = findUnit(d.textbookId, d.unitId)
   const unitName = unit ? unit.title : ''
   const out: Criterion[] = []
+  // 교과서 단원 활용 채점요소 (단원이 선택된 경우)
+  const unitCriterion = (): Criterion | null => {
+    if (!unit) return null
+    const detail = isUnit(unit) ? `의사소통 기능(${unit.communicate.join(', ')})과 읽기 글 "${unit.read.title}"에서 배운 표현` : `"${unit.title}"에서 읽은 내용과 표현`
+    return {
+      element: `교과서 단원 내용 활용 (${unit.label}. ${unitName})`,
+      scores: [
+        { score: 2, desc: `${detail}을 활용하여 내용을 구체적으로 작성함.` },
+        { score: 1, desc: '단원에서 배운 표현이나 내용을 일부만 활용함.' },
+        { score: 0, desc: '단원에서 배운 표현이나 내용을 활용하지 않음.' },
+      ],
+    }
+  }
 
   ach.forEach((a) => {
     const lv = a.levels.filter((l) => l.text.trim())
@@ -92,22 +130,27 @@ export function generateCriteria(d: Design): Criterion[] {
 
   if (hasProblem(d.problem)) {
     const p = d.problem!
+    const fmt = p.format.trim() ? `(${p.format})` : ''
     out.unshift({
-      element: '과제 수행 및 내용',
+      element: '주제에 맞는 글쓰기',
       scores: [
-        { score: 3, desc: `"${p.title || taskTitle(d)}" 과제의 요구를 모두 충족하여 주제에 맞는 내용을 구체적으로 작성함.` },
-        { score: 2, desc: '과제의 요구를 대체로 충족하였으나 내용이 일부 부족하거나 구체성이 떨어짐.' },
-        { score: 1, desc: '과제와 관련된 내용을 일부만 작성함.' },
-        { score: 0, desc: '과제와 관련 없는 내용이거나 작성하지 않음.' },
+        { score: 3, desc: `주제 "${p.topic || taskTitle(d)}"에 맞게 ${fmt}형식을 갖추어 구체적으로 작성함.` },
+        { score: 2, desc: '주제에 맞게 작성하였으나 형식이 부분적으로 맞지 않거나 내용이 구체적이지 않음.' },
+        { score: 1, desc: '주제와 관련된 내용을 일부만 작성함.' },
+        { score: 0, desc: '주제와 관련 없는 내용이거나 작성하지 않음.' },
       ],
     })
-    if (p.length.trim()) {
+    const uc = unitCriterion()
+    if (uc) out.push(uc)
+    if (p.contents.length) {
+      const list = p.contents.map((c, i) => `${i + 1}. ${c}`).join(' ')
       out.push({
-        element: '분량 충족',
+        element: '필수 포함 내용 충족',
         scores: [
-          { score: 2, desc: `요구 분량(${p.length})을 충족함.` },
-          { score: 1, desc: `요구 분량(${p.length})에 다소 못 미치나 70% 이상 작성함.` },
-          { score: 0, desc: '요구 분량의 70%에도 미치지 못함.' },
+          { score: 3, desc: `필수 포함 내용(${list})을 모두 포함함.` },
+          { score: 2, desc: '필수 포함 내용 중 한 가지가 빠지거나 불충분함.' },
+          { score: 1, desc: '필수 포함 내용 중 일부만 포함함.' },
+          { score: 0, desc: '필수 포함 내용을 포함하지 않음.' },
         ],
       })
     }
@@ -122,17 +165,35 @@ export function generateCriteria(d: Design): Criterion[] {
         ],
       })
     }
-  } else {
+    if (p.length.trim()) {
+      out.push({
+        element: '분량 충족',
+        scores: [
+          { score: 2, desc: `분량 조건(${p.length})을 충족함.` },
+          { score: 1, desc: '분량 조건에 다소 못 미치나 70% 이상 작성함.' },
+          { score: 0, desc: '분량 조건의 70%에도 미치지 못함.' },
+        ],
+      })
+    }
     out.push({
-      element: unitName ? `단원 내용 활용 (${unitName})` : '근거를 들어 설명하기',
+      element: p.etc.length ? '기타 조건 및 정확성' : '어휘와 문장의 정확성',
       scores: [
-        { score: 2, desc: unitName ? `"${unitName}" 단원에서 배운 표현과 내용을 활용하여 구체적으로 설명함.` : '자료와 연계된 구체적 근거를 제시하여 타당하게 설명함.' },
-        { score: 1, desc: unitName ? '단원에서 배운 표현이나 내용을 일부만 활용함.' : '근거를 제시하였으나 자료와의 연계가 부족함.' },
-        { score: 0, desc: unitName ? '단원 내용을 활용하지 않음.' : '근거를 제시하지 않음.' },
+        { score: 2, desc: p.etc.length ? `기타 조건(${p.etc.join(' / ')})을 지키고 오류가 의미 전달에 거의 영향을 주지 않음.` : '적절한 어휘를 사용하고 철자·문법 오류가 의미 전달에 거의 영향을 주지 않음.' },
+        { score: 1, desc: p.etc.length ? '기타 조건을 대체로 지켰고 오류가 일부 있으나 전체 의미는 이해 가능함.' : '오류가 일부 있으나 전체 의미는 이해 가능함.' },
+        { score: 0, desc: p.etc.length ? '기타 조건을 지키지 않았거나 오류가 많아 의미 파악이 어려움.' : '오류가 많아 의미 파악이 어려움.' },
       ],
     })
+    return out
   }
 
+  out.push({
+    element: unitName ? `단원 내용 활용 (${unitName})` : '근거를 들어 설명하기',
+    scores: [
+      { score: 2, desc: unitName ? `"${unitName}" 단원에서 배운 표현과 내용을 활용하여 구체적으로 설명함.` : '자료와 연계된 구체적 근거를 제시하여 타당하게 설명함.' },
+      { score: 1, desc: unitName ? '단원에서 배운 표현이나 내용을 일부만 활용함.' : '근거를 제시하였으나 자료와의 연계가 부족함.' },
+      { score: 0, desc: unitName ? '단원 내용을 활용하지 않음.' : '근거를 제시하지 않음.' },
+    ],
+  })
   out.push({
     element: '어휘와 문장의 정확성',
     scores: [

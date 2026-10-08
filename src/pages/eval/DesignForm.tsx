@@ -46,13 +46,13 @@ export default function DesignForm() {
       patch({ criteria: generateCriteria(d) })
       setCriteriaMode('manual')
       setAiBusy(false)
-      toast(hasProblem(d.problem) ? '문제의 분량·필수 문법을 반영해 채점기준 초안을 만들었어요. 검토 후 수정해 주세요' : '기본 정보와 성취기준을 반영해 채점기준 초안을 만들었어요. 검토 후 수정해 주세요')
+      toast(hasProblem(d.problem) ? '교과서 단원·성취기준·과제 조건을 반영해 채점기준 초안을 만들었어요. 검토 후 수정해 주세요' : '교과서 단원과 성취기준을 반영해 채점기준 초안을 만들었어요. 검토 후 수정해 주세요')
     }, 1800)
   }
 
   const validate = (): string | null => {
     if (!d.name.trim()) return '평가명을 입력해 주세요'
-    if (hasProblem(d.problem) && !d.problem!.title.trim()) return '문제의 과제명을 입력해 주세요'
+    if (!d.problem?.topic.trim()) return '과제 조건의 주제를 입력해 주세요'
     if (!d.achievements.some((a) => a.text.trim() || a.code)) return '성취기준을 한 개 이상 입력해 주세요'
     if (!d.criteria.length) return '채점기준을 한 개 이상 입력해 주세요'
     for (const [i, c] of d.criteria.entries()) {
@@ -208,7 +208,7 @@ export default function DesignForm() {
             <Button variant="soft" className="mt-3 !rounded-full" onClick={() => patch({ achievements: [...d.achievements, emptyAchievement()] })}>＋ 성취기준 추가</Button>
           </Step>
 
-          <Step n={3} title={<>문제 만들기 <span className="text-xs font-normal text-gray-500">(선택)</span></>} help="성취기준과 교과서 단원을 바탕으로 영어 라이팅 과제를 AI가 만들어 줘요. 과제명·설명·분량·필수 문법·시험지를 모두 수정할 수 있어요.">
+          <Step n={3} title="과제 조건" help="학생이 써야 할 글의 조건이에요. 성취기준과 교과서 단원을 바탕으로 AI가 만들어 주고, 모든 항목을 수정할 수 있어요.">
             <ProblemEditor design={d} onChange={(problem) => patch({ problem })} />
           </Step>
 
@@ -220,7 +220,7 @@ export default function DesignForm() {
             </div>
             {criteriaMode === 'ai' && (
               <div className="mb-4 rounded-xl border border-brand-200 bg-brand-50/60 p-5 text-sm">
-                <p className="mb-3 text-gray-700">{hasProblem(d.problem) ? '위에서 만든 문제(분량·필수 문법 포함)와 성취기준을 반영해 AI가 채점기준 초안을 만들어 드려요.' : '문제를 만들지 않았다면 기본 정보와 성취기준만 반영해 AI가 채점기준 초안을 만들어 드려요.'} 만들어진 뒤에는 직접 수정할 수 있어요.</p>
+                <p className="mb-3 text-gray-700">{hasProblem(d.problem) ? '교과서 단원 내용, 선택한 성취기준, 위에서 입력한 과제 조건을 모두 반영해 AI가 채점기준 초안을 만들어 드려요.' : '과제 조건이 비어 있으면 교과서 단원 내용과 성취기준만 반영해 AI가 채점기준 초안을 만들어 드려요.'} 만들어진 뒤에는 직접 수정할 수 있어요.</p>
                 <Button onClick={generateAi} disabled={aiBusy}>{aiBusy ? <><Spinner /> 생성 중…</> : '✨ AI로 채점기준 생성'}</Button>
               </div>
             )}

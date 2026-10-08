@@ -193,7 +193,6 @@ function StudentGradingInner() {
     if (!stored && student && !hasSub(student.id)) init.absence = 'unsubmitted'
     return init
   })
-  const [tab, setTab] = useState<'analysis' | 'rubric'>('analysis')
   const [viewer, setViewer] = useState(false)
   const [dirty, setDirty] = useState(false)
 
@@ -310,14 +309,9 @@ function StudentGradingInner() {
             </div>
           </div>
 
-          <h3 className="mb-3 mt-8 font-medium text-brand-700">🤖 AI 채점 근거 및 피드백</h3>
-          <div className="mb-3 grid grid-cols-2 overflow-hidden rounded-lg border text-center">
-            <button type="button" onClick={() => setTab('analysis')} className={`py-2.5 ${tab === 'analysis' ? 'bg-brand-50 font-medium text-brand-700' : ''}`}>과제물 분석 AI</button>
-            <button type="button" onClick={() => setTab('rubric')} className={`border-l py-2.5 ${tab === 'rubric' ? 'bg-brand-50 font-medium text-brand-700' : ''}`}>루브릭 기반 AI</button>
-          </div>
-          <div className="mb-1 text-xs text-gray-500">AI 채점 근거</div>
+          <h3 className="mb-3 mt-8 font-medium text-brand-700">🤖 AI 채점 근거 <span className="ml-1 text-xs font-normal text-gray-500">(평가 리포트에는 반영되지 않아요.)</span></h3>
           <div className="min-h-36 whitespace-pre-line rounded-lg border p-4 text-[13px] leading-7">
-            {(tab === 'analysis' ? draft.evidenceAnalysis : draft.evidenceRubric) || <span className="text-gray-400">{hasSub(student.id) ? (run ? '이 학생의 AI 채점 결과가 아직 없습니다.' : 'AI 채점을 먼저 실행하면 채점 근거가 표시됩니다.') : '제출된 과제물이 없어 AI 채점을 하지 않았습니다.'}</span>}
+            {draft.evidence || <span className="text-gray-400">{hasSub(student.id) ? (run ? '이 학생의 AI 채점 결과가 아직 없습니다.' : 'AI 채점을 먼저 실행하면 채점 근거가 표시됩니다.') : '제출된 과제물이 없어 AI 채점을 하지 않았습니다.'}</span>}
           </div>
 
           <h3 className="mb-2 mt-8 font-medium text-brand-700">📝 선생님 직접 피드백</h3>

@@ -84,7 +84,7 @@ export default function Home() {
                         {d.status === 'draft' ? <Badge tone="orange">임시저장</Badge> : run?.state === 'done' ? <Badge tone="green">AI 채점 완료</Badge> : run?.state === 'running' ? <Badge tone="purple">채점 중</Badge> : <Badge tone="gray">채점 전</Badge>}
                       </div>
                       <div className="truncate text-[17px] font-semibold">{d.name || '(이름 없음)'}</div>
-                      <div className="mt-0.5 truncate text-xs text-gray-500">{d.problem?.title ? `과제: ${d.problem.title}` : '문제 미등록'}</div>
+                      <div className="mt-0.5 truncate text-xs text-gray-500">{d.problem?.topic ? `주제: ${d.problem.topic}` : '과제 조건 미등록'}</div>
                       <div className="mt-3 text-xs text-gray-500">평가 대상 {d.targetIds.length}명 · 채점 완료 {confirmed}/{submitted.length}명</div>
                     </button>
                     <button type="button" aria-label="메뉴" className="absolute right-2 top-2 rounded p-1 text-gray-500 hover:bg-gray-100" onClick={() => setMenuId(menuId === d.id ? null : d.id)}>

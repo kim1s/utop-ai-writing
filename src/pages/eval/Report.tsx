@@ -4,8 +4,9 @@ import * as XLSX from 'xlsx'
 import { EvalShell, useEvalParam } from '../../components/Layout'
 import { Chevron } from '../../components/ui'
 import { CorrectionView } from '../../components/CorrectionPanel'
+import { SeteukModal } from '../../components/SeteukModal'
 import { ReportSheet } from '../../components/ReportSheet'
-import { Button, Checkbox, EmptyState, Modal, Radio, SectionHeader, Select, Well, toast } from '../../components/ui'
+import { Button, Checkbox, EmptyState, Modal, Radio, SectionHeader, Select, Well, confirmAsync, toast } from '../../components/ui'
 import { criterionMax, designMax, resolvedScore, rowStatus } from '../../lib/grading'
 import { taskTitle } from '../../lib/problemGen'
 import { useStore } from '../../lib/store'
@@ -27,16 +28,21 @@ const fmt = (n: number | null) => (n == null ? '-' : String(Math.round(n * 10) /
 
 export default function Report() {
   const { design, targets, scoreFor, statusFor, scoreRec } = useReportData()
+  const setScore = useStore((st) => st.setScore)
   const nav = useNavigate()
   const [clsFilter, setClsFilter] = useState('')
   const [sort, setSort] = useState('no')
   const [applied, setApplied] = useState({ clsFilter: '', sort: 'no' })
   const [exportOpen, setExportOpen] = useState(false)
   const [closed, setClosed] = useState<Record<string, boolean>>({})
+  const [seteukFor, setSeteukFor] = useState<Student | null>(null)
   const [exportFmt, setExportFmt] = useState<'print' | 'excel'>('print')
   const [showCompare, setShowCompare] = useState(true)
   const [showCorrection, setShowCorrection] = useState(true)
   const [printing, setPrinting] = useState(false)
+  const [printKind, setPrintKind] = useState<'report' | 'seteuk'>('report')
+  const [seteukExportOpen, setSeteukExportOpen] = useState(false)
+  const [seteukFmt, setSeteukFmt] = useState<'print' | 'excel'>('print')
   useEffect(() => {
     if (!printing) return
     const t = setTimeout(() => {
@@ -56,10 +62,40 @@ export default function Report() {
     .sort((a, b) => (applied.sort === 'score' ? (scoreFor(b) ?? -1) - (scoreFor(a) ?? -1) : 0))
 
   const average = avg(values)
+  // AI 세특이 있는 학생만 (AI 채점 때 함께 만들어진다)
+  const seteukRows = rows.filter((s) => scoreRec(s)?.seteuk && statusFor(s) === 'done')
+  /** AI가 제안한 세특을 채점이 완료된 학생 전체에 대해 한 번에 확정 */
+  const confirmAllSeteuk = async () => {
+    const targetsToConfirm = targets.filter((s) => statusFor(s) === 'done' && scoreRec(s)?.seteuk && !scoreRec(s)!.seteuk!.confirmed)
+    if (!targetsToConfirm.length) return toast('확정할 AI 세특이 없어요')
+    if (!(await confirmAsync(`AI가 제안한 세특 ${targetsToConfirm.length}명분을 모두 확정할까요?
+이미 확정한 세특은 그대로 두고, 확정하기 전의 초안만 확정돼요.`))) return
+    targetsToConfirm.forEach((s) => setScore(design.id, s.id, { seteuk: { ...scoreRec(s)!.seteuk!, confirmed: true } }))
+    toast(`AI 세특 ${targetsToConfirm.length}명분을 확정했어요`)
+  }
+  const doSeteukExport = () => {
+    if (!seteukRows.length) return toast('내보낼 AI 세특이 없어요. AI 채점을 실행하고 채점을 확정해 주세요')
+    if (seteukFmt === 'print') {
+      setSeteukExportOpen(false)
+      setPrintKind('seteuk')
+      setPrinting(true)
+      return
+    }
+    const data = seteukRows.map((s) => {
+      const t = scoreRec(s)!.seteuk!
+      return { 반: `${s.grade}-${s.cls}`, 학번: studentNo(s), 이름: s.name, '세특 키워드': t.keywords.join(', '), '세특 초안': t.draft, 확정: t.confirmed ? '확정' : '초안' }
+    })
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'AI세특')
+    XLSX.writeFile(wb, `${design.name}_AI세특.xlsx`)
+    setSeteukExportOpen(false)
+    toast('AI 세특을 엑셀로 내보냈습니다')
+  }
   const doExport = () => {
     if (!rows.length) return toast('내보낼 학생이 없습니다')
     if (exportFmt === 'print') {
       setExportOpen(false)
+      setPrintKind('report')
       setPrinting(true)
       return
     }
@@ -88,7 +124,7 @@ export default function Report() {
 
   return (
     <EvalShell tab="report">
-      <SectionHeader title="평가 리포트" desc="실시된 평가 결과를 확인하고 엑셀로 다운받을 수 있습니다." right={<Button onClick={() => setExportOpen(true)}>⬇ 평가 리포트 내보내기</Button>} />
+      <SectionHeader title="평가 리포트" desc="실시된 평가 결과를 확인하고 엑셀로 다운받을 수 있습니다." right={<><Button onClick={() => setExportOpen(true)}>⬇ 평가 리포트 내보내기</Button><Button variant="outline" onClick={() => setSeteukExportOpen(true)}>⬇ AI 세특 내보내기</Button></>} />
       {targets.length === 0 ? (
         <Well><EmptyState kind="doc" title="평가 대상이 없어요." desc="평가 대상을 추가하고 AI 채점을 완료하면 리포트를 볼 수 있어요." /></Well>
       ) : (
@@ -120,6 +156,7 @@ export default function Report() {
                 <Select value={clsFilter} onChange={setClsFilter} className="flex-1" options={[{ value: '', label: '전체' }, ...classOptions.map((c) => ({ value: c, label: `${c.replace('-', '학년 ')}반` }))]} />
                 <Select value={sort} onChange={setSort} className="flex-1" options={[{ value: 'no', label: '학번 순' }, { value: 'score', label: '총점 높은 순' }]} />
                 <Button onClick={() => setApplied({ clsFilter, sort })}>조회</Button>
+                <button type="button" title="AI 세특 전체 적용" aria-label="AI 세특 전체 적용" className="rounded-lg border border-brand-400 px-3 py-2 text-brand-600 hover:bg-brand-50" onClick={confirmAllSeteuk}>⚡</button>
               </div>
               <div className="space-y-3">
                 {[...rows.reduce((m, s) => m.set(`${s.grade}학년 ${s.cls}반`, [...(m.get(`${s.grade}학년 ${s.cls}반`) ?? []), s]), new Map<string, Student[]>())].map(([key, list]) => {
@@ -135,7 +172,7 @@ export default function Report() {
                       {open && (
                         <div className="border-t px-4 pb-3 pt-1">
                           <table className="table-base">
-                            <thead><tr><th>학번</th><th>이름</th><th>총점</th><th>상태</th><th>평가 리포트</th></tr></thead>
+                            <thead><tr><th>학번</th><th>이름</th><th>총점</th><th>상태</th><th>평가 리포트</th><th>AI 세특</th></tr></thead>
                             <tbody>
                               {list.map((s) => (
                                 <tr key={s.id}>
@@ -144,6 +181,15 @@ export default function Report() {
                                   <td>{scoreFor(s) ?? '-'}</td>
                                   <td className="text-gray-600">{{ done: '채점 완료', waiting: '채점 대기', unsubmitted: '미제출', nonresponse: '미응시' }[statusFor(s)]}</td>
                                   <td><button type="button" className="font-medium text-brand-600 hover:underline" onClick={() => nav(`/evals/${design.id}/report/student/${s.id}`)}>보기</button></td>
+                                  <td>
+                                    {statusFor(s) === 'done' ? (
+                                      <button type="button" className="font-medium text-brand-600 hover:underline" onClick={() => setSeteukFor(s)}>
+                                        {scoreRec(s)?.seteuk?.confirmed ? '확정됨 ✓' : scoreRec(s)?.seteuk ? '초안 보기' : 'AI 세특'}
+                                      </button>
+                                    ) : (
+                                      <span className="text-gray-300">-</span>
+                                    )}
+                                  </td>
                                 </tr>
                               ))}
                             </tbody>
@@ -179,11 +225,44 @@ export default function Report() {
         </div>
         <p className="mt-4 text-xs text-gray-500">평균과 비교하는 내용을 빼고 내보내려면 &quot;평균 대비 비교&quot;를 해제해 주세요.</p>
       </Modal>
-      {printing && (
+      <Modal
+        open={seteukExportOpen}
+        title="AI 세특 내보내기"
+        onClose={() => setSeteukExportOpen(false)}
+        width="max-w-md"
+        footer={<><Button variant="gray" onClick={() => setSeteukExportOpen(false)}>취소</Button><Button onClick={doSeteukExport}>{seteukFmt === 'print' ? '🖨 출력' : '▤ 엑셀로 내보내기'}</Button></>}
+      >
+        <p className="mb-4 text-sm text-gray-600">현재 조회된 학생 중 채점이 완료되어 AI 세특이 있는 {seteukRows.length}명을 내보냅니다.</p>
+        <div className="mb-1 text-[13px] font-medium">내보내기 방식</div>
+        <div className="flex gap-6">
+          <Radio name="sfmt" checked={seteukFmt === 'print'} onChange={() => setSeteukFmt('print')} label="출력" />
+          <Radio name="sfmt" checked={seteukFmt === 'excel'} onChange={() => setSeteukFmt('excel')} label="엑셀로 내보내기" />
+        </div>
+      </Modal>
+      <SeteukModal open={!!seteukFor} onClose={() => setSeteukFor(null)} design={design} student={seteukFor} />
+      {printing && printKind === 'report' && (
         <div className="hidden print:block print-area">
           {rows.map((s) => (
             <ReportSheet key={s.id} design={design} student={s} score={scoreRec(s)} hasSub={statusFor(s) !== 'unsubmitted'} avg={average} showCompare={showCompare} showCorrection={showCorrection} />
           ))}
+        </div>
+      )}
+      {printing && printKind === 'seteuk' && (
+        <div className="hidden print:block print-area">
+          <div className="mx-auto max-w-[680px] bg-white px-10 py-8 text-[13px] leading-7 text-gray-900">
+            <h1 className="mb-1 text-xl font-bold">{design.name} · AI 세특</h1>
+            <p className="mb-5 text-xs text-gray-600">{design.year}학년도 {design.semester}학기 {design.subject}</p>
+            {seteukRows.map((s) => {
+              const t = scoreRec(s)!.seteuk!
+              return (
+                <div key={s.id} className="mb-5 break-inside-avoid border-b pb-4">
+                  <div className="mb-1 font-bold">{studentNo(s)} {s.name}</div>
+                  <div className="mb-1.5 text-xs text-gray-600">키워드: {t.keywords.join(' · ')}</div>
+                  <p className="whitespace-pre-line">{t.draft}</p>
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
     </EvalShell>

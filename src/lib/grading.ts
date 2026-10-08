@@ -60,14 +60,10 @@ export function simulateAiScore(design: Design, studentId: string, answerText?: 
   const picks = design.criteria.map((c) => pickScore(c, rand()))
   const descOf = (c: Criterion, v: number) => c.scores.find((s) => s.score === v)?.desc ?? ''
 
-  const evidenceAnalysis = design.criteria
-    .map((c, i) => `• [${c.element}] 학생 답안을 분석한 결과, ${descOf(c, picks[i])}`.replace(/\.$/, '') + ' 점이 확인됨.')
-    .join('\n')
-
-  const evidenceRubric = design.criteria
+  const evidence = design.criteria
     .map((c, i) => {
       const max = criterionMax(c)
-      return `• ${c.element} (${picks[i]}/${max}점): 채점기준 "${descOf(c, picks[i])}"에 해당하는 것으로 판단함.`
+      return `• ${c.element} (${picks[i]}/${max}점): ${descOf(c, picks[i])}`
     })
     .join('\n')
 
@@ -91,8 +87,7 @@ export function simulateAiScore(design: Design, studentId: string, answerText?: 
     absence: 'scoring',
     picks: picks.map(() => null),
     aiPicks: picks,
-    evidenceAnalysis,
-    evidenceRubric,
+    evidence,
     teacherFeedback,
     correction: buildCorrection(answerText ?? essayFor(studentId)),
     done: false,
@@ -105,8 +100,7 @@ export function emptyScore(design: Design): StudentScore {
     absence: 'scoring',
     picks: Array(n).fill(null),
     aiPicks: Array(n).fill(null),
-    evidenceAnalysis: '',
-    evidenceRubric: '',
+    evidence: '',
     teacherFeedback: '',
     done: false,
   }

@@ -55,32 +55,27 @@ export interface GradeRow {
   min: number | null
 }
 
-export interface SheetBlock {
-  id: string
-  type: 'text' | 'image' | 'question'
-  /** text/question: 본문, image: data URL */
-  content: string
-  caption?: string
-}
-
+/** 과제 조건: 주제 - 형식 - 필수 포함 내용 - 필수 포함 문법 - 분량 - 기타 */
 export interface Problem {
-  /** 학생에게 노출되는 과제명 */
-  title: string
-  /** 학생에게 과제를 설명하는 글 */
-  description: string
-  /** 분량 (예: 5~7문장) */
-  length: string
+  /** 주제 (예: 친구에게 줄 선물을 소개하는 편지 글쓰기) */
+  topic: string
+  /** 형식 (예: 편지글) */
+  format: string
+  /** 필수 포함 내용 (번호 순서대로) */
+  contents: string[]
   /** 필수 포함 문법 */
   grammar: string[]
-  /** 시험지 구성 요소 (지문·이미지·문제) */
-  sheet: SheetBlock[]
+  /** 분량 (예: 각 문장은 3단어 이상, 전체 글은 50단어 이상) */
+  length: string
+  /** 기타 조건 */
+  etc: string[]
 }
 
 export interface Design {
   id: string
   /** 선생님이 평가를 구분하기 위한 이름 (학생에게는 보이지 않음) */
   name: string
-  /** 문제 (선택): 학생에게 보여 주는 과제명·설명·시험지. 과제명은 문제의 title */
+  /** 과제 조건 (필수). 주제는 학생 결과물에 과제 이름으로 쓰인다 */
   problem?: Problem
   /** 학교급 */
   schoolLevel: SchoolLevel
@@ -142,17 +137,25 @@ export interface CorrectionSentence {
 
 export type AbsenceType = 'scoring' | 'nonresponse' | 'unsubmitted'
 
+/** AI 세특 (생활기록부 세부능력 및 특기사항) */
+export interface Seteuk {
+  keywords: string[]
+  draft: string
+  confirmed: boolean
+}
+
 export interface StudentScore {
   absence: AbsenceType
   /** 채점기준별 선택된 점수 (null = 미선택) */
   picks: (number | null)[]
   /** AI 제안 점수 */
   aiPicks: (number | null)[]
-  evidenceAnalysis: string
-  evidenceRubric: string
+  /** AI 채점 근거 (채점요소별) */
+  evidence: string
   teacherFeedback: string
   /** AI 1차 첨삭 + 선생님 수정 */
   correction?: CorrectionSentence[]
+  seteuk?: Seteuk
   done: boolean
 }
 
