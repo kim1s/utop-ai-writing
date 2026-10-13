@@ -3,24 +3,27 @@ import { useSearchParams } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import { PageContainer, TitleBar } from '../components/Layout'
 import { Button, EmptyState, Modal, NumberInput, Select, confirmAsync, inputCls, toast } from '../components/ui'
-import { CURRENT_YEAR, SCHOOL_NAME } from '../lib/seed'
-import { useStore } from '../lib/store'
+import { ACADEMY_NAME, CURRENT_YEAR, SCHOOL_NAME, studentLoginIdOf } from '../lib/seed'
+import { useMe, useOrgData, useStore } from '../lib/store'
 import type { Student } from '../lib/types'
 
 export default function SchoolInfo() {
   const [params, setParams] = useSearchParams()
-  const tab = params.get('tab') === 'teachers' ? 'teachers' : 'students'
+  const { org } = useOrgData()
+  const academy = org === 'academy'
+  // 학원은 학원당 계정 하나라서 선생님 목록이 없다
+  const tab = !academy && params.get('tab') === 'teachers' ? 'teachers' : 'students'
   const setTab = (t: string) => setParams(t === 'students' ? {} : { tab: t })
 
   return (
     <>
-      <TitleBar title="학교 정보" sub={SCHOOL_NAME} />
+      <TitleBar title={academy ? '학원 정보' : '학교 정보'} sub={academy ? ACADEMY_NAME : SCHOOL_NAME} />
       <PageContainer>
         <div className="flex gap-1.5">
-          {[
+          {(academy ? [['students', '학생 관리']] : [
             ['students', '학생 관리'],
             ['teachers', '선생님 목록'],
-          ].map(([k, l]) => (
+          ]).map(([k, l]) => (
             <button key={k} type="button" onClick={() => setTab(k)} className={`flex-1 rounded-t-2xl py-3.5 text-[15px] font-semibold ${tab === k ? 'bg-white text-brand-900' : 'bg-tab text-gray-800 hover:bg-[#bfcaef]'}`}>
               {l}
             </button>
@@ -33,7 +36,8 @@ export default function SchoolInfo() {
 }
 
 function Teachers() {
-  const { teachers, me } = useStore()
+  const teachers = useStore((s) => s.teachers)
+  const me = useMe()
   return (
     <>
       <h2 className="text-xl font-semibold">선생님 목록</h2>
@@ -67,7 +71,10 @@ function Teachers() {
 }
 
 function Students() {
-  const { students, deleteStudents, designs, me } = useStore()
+  const deleteStudents = useStore((s) => s.deleteStudents)
+  const me = useMe()
+  const { students, designs, org } = useOrgData()
+  const academy = org === 'academy'
   const [year, setYear] = useState(CURRENT_YEAR)
   const [grade, setGrade] = useState(1)
   const [menu, setMenu] = useState(false)
@@ -87,7 +94,7 @@ function Students() {
       <div className="flex items-start justify-between">
         <div>
           <h2 className="text-xl font-semibold">학생 관리</h2>
-          <p className="mt-1 text-[13px] text-gray-600">평가를 실시할 학생 정보를 등록합니다. 등록된 학생 정보는 학교 전체 선생님에게 공유됩니다.</p>
+          <p className="mt-1 text-[13px] text-gray-600">평가를 실시할 학생 정보를 등록합니다. {academy ? '등록된 학생 정보는 학원에서 함께 사용합니다.' : '등록된 학생 정보는 학교 전체 선생님에게 공유됩니다.'} 학생을 등록하면 학생 로그인 계정이 자동으로 만들어져요.</p>
         </div>
         <div className="relative">
           <Button onClick={() => setMenu(!menu)}>＋ 학생 등록</Button>
@@ -123,6 +130,8 @@ function Students() {
             <>
               <div className="mb-3 flex items-center justify-between">
                 <span className="text-sm text-gray-600">총 {rows.length}명</span>
+                <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => downloadAccounts(rows, `${year}학년도_${curGrade}학년_학생계정.xlsx`)}>▤ 학생 계정 내려받기</Button>
                 <Button
                   variant="dangerOutline"
                   size="sm"
@@ -137,6 +146,7 @@ function Students() {
                 >
                   🗑 학생 계정 삭제
                 </Button>
+                </div>
               </div>
               <div className="max-h-[520px] overflow-y-auto">
                 <table className="table-base">
@@ -147,7 +157,9 @@ function Students() {
                       <th>반</th>
                       <th>번호</th>
                       <th>이름</th>
-                      <th>평가 중인 선생님</th>
+                      <th>로그인 아이디</th>
+                      <th>비밀번호</th>
+                      {!academy && <th>평가 중인 선생님</th>}
                       <th>수정</th>
                     </tr>
                   </thead>
@@ -159,7 +171,9 @@ function Students() {
                         <td>{s.cls}</td>
                         <td>{s.num}</td>
                         <td>{s.name}</td>
-                        <td className="text-gray-600">{teacherOf(s)}</td>
+                        <td className="font-mono text-[13px] text-gray-700">{s.loginId}</td>
+                        <td className="font-mono text-[13px] text-gray-500">{s.password}</td>
+                        {!academy && <td className="text-gray-600">{teacherOf(s)}</td>}
                         <td>
                           <button type="button" aria-label="수정" className="text-brand-600" onClick={() => { setEditing(s); setModal('single') }}>✎</button>
                         </td>
@@ -179,8 +193,17 @@ function Students() {
   )
 }
 
+/** 학생에게 나눠 줄 로그인 정보를 엑셀로 내려받는다 */
+function downloadAccounts(rows: Student[], fileName: string) {
+  const ws = XLSX.utils.json_to_sheet(rows.map((s) => ({ 학년: s.grade, 반: s.cls, 번호: s.num, 이름: s.name, 아이디: s.loginId, 비밀번호: s.password })))
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, '학생계정')
+  XLSX.writeFile(wb, fileName)
+}
+
 function SingleModal({ open, onClose, editing, defaultYear, defaultGrade }: { open: boolean; onClose: () => void; editing: Student | null; defaultYear: number; defaultGrade: number }) {
-  const { students, addStudents, updateStudent } = useStore()
+  const { addStudents, updateStudent } = useStore()
+  const { students, org } = useOrgData()
   const base = editing ?? { year: defaultYear, grade: defaultGrade, cls: 1, num: 1, name: '' }
   const [f, setF] = useState(base)
   const [key, setKey] = useState('')
@@ -196,7 +219,7 @@ function SingleModal({ open, onClose, editing, defaultYear, defaultGrade }: { op
     if (dup) return toast('같은 학년·반·번호의 학생이 이미 있습니다')
     if (editing) updateStudent(editing.id, { grade: f.grade, cls: f.cls, num: f.num, name: f.name.trim(), year: f.year })
     else addStudents([{ year: f.year, grade: f.grade, cls: f.cls, num: f.num, name: f.name.trim() }])
-    toast(editing ? '학생 정보를 수정했습니다' : '학생을 등록했습니다')
+    toast(editing ? '학생 정보를 수정했습니다' : `학생을 등록했습니다 (아이디 ${studentLoginIdOf(org, f.year, f.grade, f.cls, f.num)} · 초기 비밀번호 1234)`)
     onClose()
   }
   const row = (label: string, el: React.ReactNode) => (
@@ -273,7 +296,7 @@ function BulkModal({ open, onClose, defaultYear }: { open: boolean; onClose: () 
             disabled={!rows.length}
             onClick={() => {
               addStudents(rows.map((r) => ({ ...r, year })))
-              toast(`${rows.length}명을 등록했습니다`)
+              toast(`${rows.length}명을 등록했습니다. 학생 계정이 자동으로 만들어졌어요`)
               close()
             }}
           >

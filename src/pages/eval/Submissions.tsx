@@ -96,8 +96,8 @@ export default function Submissions() {
                                     <td>{sub ? <Badge tone="blue">제출</Badge> : <Badge tone="red">미제출</Badge>}</td>
                                     <td>{studentNo(st)}</td>
                                     <td>{st.name}</td>
-                                    <td>{!sub ? '-' : sub.textSource === 'typed' ? <Badge tone="orange">직접 입력</Badge> : <Badge tone="purple">파일 · OCR</Badge>}</td>
-                                    <td className="text-gray-700">{last ? `${last.uploadedAt} ${last.by} 업로드` : '-'}</td>
+                                    <td>{!sub ? '-' : sub.textSource === 'typed' ? <Badge tone="orange">{sub.submittedBy === 'student' ? '학생 직접 제출' : '직접 입력'}</Badge> : <Badge tone="purple">파일 · OCR</Badge>}</td>
+                                    <td className="text-gray-700">{last ? `${last.uploadedAt} ${last.by} 업로드` : sub?.submittedAt ? `${sub.submittedAt} 학생 제출` : '-'}</td>
                                     <td>{sub?.files.length ?? 0}</td>
                                     <td>{sub ? <button type="button" className="font-medium text-brand-600 hover:underline" onClick={() => setViewFor(st)}>내용 확인</button> : '-'}</td>
                                     <td><button type="button" className="font-medium text-brand-600 hover:underline" onClick={() => setEditFor(st)}>제출 관리</button></td>

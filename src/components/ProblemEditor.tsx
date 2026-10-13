@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { MIDDLE_ENGLISH_TEXTBOOKS } from '../data/middleEnglishTextbooks'
-import { emptyProblem, generateProblem, hasProblem } from '../lib/problemGen'
+import { ACADEMY_PROMPT_EXAMPLES, emptyProblem, generateAcademyProblem, generateProblem, hasProblem } from '../lib/problemGen'
+import { LEVEL_LABEL } from '../lib/seed'
 import type { Design, Problem } from '../lib/types'
 import { Button, Modal, Spinner, confirmAsync, inputCls, toast } from './ui'
 
@@ -106,6 +107,8 @@ export function ProblemEditor({ design, onChange }: { design: Design; onChange: 
   const [busy, setBusy] = useState(false)
   const [gram, setGram] = useState('')
   const [gramPicker, setGramPicker] = useState(false)
+  const [prompt, setPrompt] = useState('')
+  const academy = design.org === 'academy'
   const set = (patch: Partial<Problem>) => onChange({ ...p, ...patch })
   const toggleGrammar = (g: string) => set({ grammar: p.grammar.includes(g) ? p.grammar.filter((x) => x !== g) : [...p.grammar, g] })
   const addGrammar = () => {
@@ -115,11 +118,14 @@ export function ProblemEditor({ design, onChange }: { design: Design; onChange: 
   }
 
   const generate = async () => {
-    if (!design.achievements.some((a) => a.text.trim())) return toast('먼저 성취기준을 선택해 주세요')
+    // 학교: 성취기준(+교과서 단원)으로 만든다 / 학원: 선생님이 쓴 프롬프트로 만들고, 비워 두면 학년에 맞는 주제를 무작위로 만든다
+    // 프롬프트를 쓰면 학교·학원 모두 프롬프트로 만든다. 비우면 학교는 성취기준(+단원) 기준, 학원은 학년에 맞는 랜덤 주제
+    const byPrompt = academy || !!prompt.trim()
+    if (!byPrompt && !design.achievements.some((a) => a.text.trim())) return toast('먼저 성취기준을 선택해 주세요')
     if (hasProblem(design.problem) && !(await confirmAsync('이미 입력한 과제 조건이 AI가 만든 내용으로 바뀝니다. 계속할까요?'))) return
     setBusy(true)
     setTimeout(() => {
-      onChange(generateProblem(design))
+      onChange(byPrompt ? generateAcademyProblem(design, prompt, p.topic.trim() || undefined) : generateProblem(design))
       setBusy(false)
       toast('AI가 과제 조건을 만들었어요. 내용을 검토하고 자유롭게 수정해 주세요')
     }, 1800)
@@ -133,8 +139,33 @@ export function ProblemEditor({ design, onChange }: { design: Design; onChange: 
   return (
     <div>
       <div className="mb-4 rounded-xl border border-brand-200 bg-brand-50/60 p-4 text-sm">
-        <p className="mb-3 text-gray-700">{design.unitId ? '교과서 단원 내용과 선택한 성취기준' : '선택한 성취기준(교과서 단원을 고르면 단원 내용도)'}을 바탕으로 영어 라이팅 과제의 조건을 AI가 만들어 드려요. 직접 입력해도 돼요.</p>
-        <Button onClick={generate} disabled={busy}>{busy ? <><Spinner /> 생성 중…</> : '✨ AI로 과제 조건 만들기'}</Button>
+        <label htmlFor="problem-prompt" className="mb-1.5 block font-medium text-gray-800">어떤 과제를 내고 싶으신가요? {!academy && <span className="font-normal text-gray-500">(선택)</span>}</label>
+        <textarea
+          id="problem-prompt"
+          className={`${inputCls} min-h-[88px] resize-none`}
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          maxLength={300}
+          placeholder={ACADEMY_PROMPT_EXAMPLES.slice(0, 3).map((x) => `예) ${x}`).join('\n')}
+        />
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          <span className="py-1 text-xs text-gray-500">예시 프롬프트</span>
+          {ACADEMY_PROMPT_EXAMPLES.map((ex) => (
+            <button key={ex} type="button" onClick={() => setPrompt(ex)} className="rounded-full border border-brand-200 bg-white px-3 py-1 text-xs text-brand-700 hover:bg-brand-50">
+              {ex}
+            </button>
+          ))}
+        </div>
+        <p className="mb-3 mt-3 text-gray-700">
+          프롬프트를 입력하면 그에 맞는 과제를 만들어 드려요.{' '}
+          {academy ? (
+            <b className="font-medium">입력하지 않아도 {LEVEL_LABEL[design.schoolLevel]} {design.grade}학년에 맞는 주제가 무작위로 만들어져요.</b>
+          ) : (
+            <b className="font-medium">입력하지 않으면 {design.unitId ? '교과서 단원 내용과 선택한 성취기준' : '선택한 성취기준'}을 바탕으로 만들어요.</b>
+          )}{' '}
+          만들어진 내용은 모두 수정할 수 있어요.
+        </p>
+        <Button onClick={generate} disabled={busy}>{busy ? <><Spinner /> 생성 중…</> : prompt.trim() ? '✨ AI로 과제 조건 만들기' : academy ? '🎲 학년에 맞는 주제 랜덤 생성' : '✨ 성취기준·단원으로 과제 조건 만들기'}</Button>
       </div>
 
       <div className="mb-3 flex justify-end">
@@ -157,7 +188,7 @@ export function ProblemEditor({ design, onChange }: { design: Design; onChange: 
         <div>
           <div className="mb-1.5 flex items-center justify-between">
             <label className="text-[13px] font-medium">필수 포함 문법 <span className="font-normal text-gray-500">(선택)</span></label>
-            <button type="button" className="text-xs font-medium text-brand-600 hover:underline" onClick={() => setGramPicker(true)}>📚 교과서 문법에서 선택</button>
+            {!academy && <button type="button" className="text-xs font-medium text-brand-600 hover:underline" onClick={() => setGramPicker(true)}>📚 교과서 문법에서 선택</button>}
           </div>
           <div className="flex gap-2">
             <input

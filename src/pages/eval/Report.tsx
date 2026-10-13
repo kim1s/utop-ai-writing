@@ -29,6 +29,7 @@ const fmt = (n: number | null) => (n == null ? '-' : String(Math.round(n * 10) /
 export default function Report() {
   const { design, targets, scoreFor, statusFor, scoreRec } = useReportData()
   const setScore = useStore((st) => st.setScore)
+  const sendReports = useStore((st) => st.sendReports)
   const nav = useNavigate()
   const [clsFilter, setClsFilter] = useState('')
   const [sort, setSort] = useState('no')
@@ -62,6 +63,17 @@ export default function Report() {
     .sort((a, b) => (applied.sort === 'score' ? (scoreFor(b) ?? -1) - (scoreFor(a) ?? -1) : 0))
 
   const average = avg(values)
+  // AI 세특은 학교 생활기록부용이라 학원 평가에는 없다
+  const academy = design.org === 'academy'
+  const sentCount = graded.filter((s) => scoreRec(s)?.reportSentAt).length
+  const rewriteCount = graded.filter((s) => scoreRec(s)?.rewrite).length
+  /** 채점이 완료됐고 아직 리포트를 받지 못한 학생에게 한 번에 보낸다 */
+  const sendAllReports = async () => {
+    const unsent = graded.filter((s) => !scoreRec(s)?.reportSentAt)
+    if (!unsent.length) return toast(graded.length ? '모든 학생에게 이미 리포트를 보냈어요' : '채점이 완료된 학생이 없어요')
+    if (!(await confirmAsync(`채점이 완료된 ${unsent.length}명에게 평가 리포트를 보낼까요?\n학생은 첨삭 내용을 보고 rewriting 해서 다시 제출해야 해요.`))) return
+    toast(`${sendReports(design.id, unsent.map((s) => s.id))}명에게 평가 리포트를 보냈어요`)
+  }
   // AI 세특이 있는 학생만 (AI 채점 때 함께 만들어진다)
   const seteukRows = rows.filter((s) => scoreRec(s)?.seteuk && statusFor(s) === 'done')
   /** AI가 제안한 세특을 채점이 완료된 학생 전체에 대해 한 번에 확정 */
@@ -109,6 +121,8 @@ export default function Report() {
       }
       design.criteria.forEach((c, i) => { row[c.element] = rec?.picks[i] ?? '' })
       row['선생님 피드백'] = rec?.teacherFeedback ?? ''
+      row['리포트 전송'] = rec?.reportSentAt ? `전송 (${rec.reportSentAt})` : ''
+      row['Rewriting'] = rec?.rewrite ? rec.rewrite.text : rec?.reportSentAt ? '미제출' : ''
       if (showCorrection) {
         row['첨삭(수정문)'] = rec?.correction?.map((c) => c.revised.map((g) => g.t).join('')).join(' ') ?? ''
         row['첨삭 수정 이유'] = rec?.correction?.map((c, i) => (c.note ? `${i + 1}. ${c.note.replace(/\n/g, ' ')}` : '')).filter(Boolean).join('\n') ?? ''
@@ -124,7 +138,7 @@ export default function Report() {
 
   return (
     <EvalShell tab="report">
-      <SectionHeader title="평가 리포트" desc="실시된 평가 결과를 확인하고 엑셀로 다운받을 수 있습니다." right={<><Button onClick={() => setExportOpen(true)}>⬇ 평가 리포트 내보내기</Button><Button variant="outline" onClick={() => setSeteukExportOpen(true)}>⬇ AI 세특 내보내기</Button></>} />
+      <SectionHeader title="평가 리포트" desc="실시된 평가 결과를 확인하고 엑셀로 다운받을 수 있습니다." right={<><Button onClick={() => setExportOpen(true)}>⬇ 평가 리포트 내보내기</Button>{!academy && <Button variant="outline" onClick={() => setSeteukExportOpen(true)}>⬇ AI 세특 내보내기</Button>}</>} />
       {targets.length === 0 ? (
         <Well><EmptyState kind="doc" title="평가 대상이 없어요." desc="평가 대상을 추가하고 AI 채점을 완료하면 리포트를 볼 수 있어요." /></Well>
       ) : (
@@ -156,7 +170,11 @@ export default function Report() {
                 <Select value={clsFilter} onChange={setClsFilter} className="flex-1" options={[{ value: '', label: '전체' }, ...classOptions.map((c) => ({ value: c, label: `${c.replace('-', '학년 ')}반` }))]} />
                 <Select value={sort} onChange={setSort} className="flex-1" options={[{ value: 'no', label: '학번 순' }, { value: 'score', label: '총점 높은 순' }]} />
                 <Button onClick={() => setApplied({ clsFilter, sort })}>조회</Button>
-                <button type="button" title="AI 세특 전체 적용" aria-label="AI 세특 전체 적용" className="rounded-lg border border-brand-400 px-3 py-2 text-brand-600 hover:bg-brand-50" onClick={confirmAllSeteuk}>⚡</button>
+                {!academy && <button type="button" title="AI 세특 전체 적용" aria-label="AI 세특 전체 적용" className="rounded-lg border border-brand-400 px-3 py-2 text-brand-600 hover:bg-brand-50" onClick={confirmAllSeteuk}>⚡</button>}
+              </div>
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-brand-50/60 px-4 py-3 text-[13px] text-gray-700">
+                <span>학생에게 리포트를 보내면 학생이 첨삭을 보고 rewriting 해서 다시 제출해요. · 리포트 전송 <b>{sentCount}</b>/{graded.length}명 · Rewriting 제출 <b>{rewriteCount}</b>/{sentCount}명</span>
+                <Button size="sm" onClick={sendAllReports}>📨 채점 완료 학생에게 리포트 보내기</Button>
               </div>
               <div className="space-y-3">
                 {[...rows.reduce((m, s) => m.set(`${s.grade}학년 ${s.cls}반`, [...(m.get(`${s.grade}학년 ${s.cls}반`) ?? []), s]), new Map<string, Student[]>())].map(([key, list]) => {
@@ -172,7 +190,7 @@ export default function Report() {
                       {open && (
                         <div className="border-t px-4 pb-3 pt-1">
                           <table className="table-base">
-                            <thead><tr><th>학번</th><th>이름</th><th>총점</th><th>상태</th><th>평가 리포트</th><th>AI 세특</th></tr></thead>
+                            <thead><tr><th>학번</th><th>이름</th><th>총점</th><th>상태</th><th>평가 리포트</th><th>학생 전송</th><th>Rewriting</th>{!academy && <th>AI 세특</th>}</tr></thead>
                             <tbody>
                               {list.map((s) => (
                                 <tr key={s.id}>
@@ -182,14 +200,34 @@ export default function Report() {
                                   <td className="text-gray-600">{{ done: '채점 완료', waiting: '채점 대기', unsubmitted: '미제출', nonresponse: '미응시' }[statusFor(s)]}</td>
                                   <td><button type="button" className="font-medium text-brand-600 hover:underline" onClick={() => nav(`/evals/${design.id}/report/student/${s.id}`)}>보기</button></td>
                                   <td>
-                                    {statusFor(s) === 'done' ? (
-                                      <button type="button" className="font-medium text-brand-600 hover:underline" onClick={() => setSeteukFor(s)}>
-                                        {scoreRec(s)?.seteuk?.confirmed ? '확정됨 ✓' : scoreRec(s)?.seteuk ? '초안 보기' : 'AI 세특'}
-                                      </button>
+                                    {statusFor(s) !== 'done' ? (
+                                      <span className="text-gray-300">-</span>
+                                    ) : scoreRec(s)?.reportSentAt ? (
+                                      <span className="text-emerald-600" title={scoreRec(s)?.reportSentAt}>전송됨 ✓</span>
+                                    ) : (
+                                      <button type="button" className="font-medium text-brand-600 hover:underline" onClick={() => toast(`${s.name} 학생에게 평가 리포트를 보냈어요 (${sendReports(design.id, [s.id])}명)`)}>보내기</button>
+                                    )}
+                                  </td>
+                                  <td className="text-[13px]">
+                                    {scoreRec(s)?.rewrite ? (
+                                      <button type="button" className="font-medium text-emerald-600 hover:underline" onClick={() => nav(`/evals/${design.id}/report/student/${s.id}`)}>제출됨 · 보기</button>
+                                    ) : scoreRec(s)?.reportSentAt ? (
+                                      <span className="text-orange-500">작성 중</span>
                                     ) : (
                                       <span className="text-gray-300">-</span>
                                     )}
                                   </td>
+                                  {!academy && (
+                                    <td>
+                                      {statusFor(s) === 'done' ? (
+                                        <button type="button" className="font-medium text-brand-600 hover:underline" onClick={() => setSeteukFor(s)}>
+                                          {scoreRec(s)?.seteuk?.confirmed ? '확정됨 ✓' : scoreRec(s)?.seteuk ? '초안 보기' : 'AI 세특'}
+                                        </button>
+                                      ) : (
+                                        <span className="text-gray-300">-</span>
+                                      )}
+                                    </td>
+                                  )}
                                 </tr>
                               ))}
                             </tbody>
@@ -239,7 +277,7 @@ export default function Report() {
           <Radio name="sfmt" checked={seteukFmt === 'excel'} onChange={() => setSeteukFmt('excel')} label="엑셀로 내보내기" />
         </div>
       </Modal>
-      <SeteukModal open={!!seteukFor} onClose={() => setSeteukFor(null)} design={design} student={seteukFor} />
+      {!academy && <SeteukModal open={!!seteukFor} onClose={() => setSeteukFor(null)} design={design} student={seteukFor} />}
       {printing && printKind === 'report' && (
         <div className="hidden print:block print-area">
           {rows.map((s) => (
@@ -275,6 +313,7 @@ export function StudentReport() {
   const nav = useNavigate()
   const { design, targets, scoreFor, statusFor, scoreRec } = useReportData()
   const [pick, setPick] = useState(studentId ?? '')
+  const sendReports = useStore((s) => s.sendReports)
   if (!design) return null
   const back = `/evals/${design.id}/report`
   const student = targets.find((s) => s.id === studentId)
@@ -367,6 +406,32 @@ export function StudentReport() {
           <h3 className="mb-3 border-l-2 border-brand-900 pl-2.5 text-[15px] font-semibold text-brand-900">첨삭</h3>
           <div className="rounded-xl bg-white p-5">
             <CorrectionView value={sc.correction} />
+          </div>
+        </Well>
+      )}
+
+      {st === 'done' && (
+        <Well className="mt-5">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="border-l-2 border-brand-900 pl-2.5 text-[15px] font-semibold text-brand-900">학생 전송 · Rewriting</h3>
+            {!sc?.reportSentAt && <Button size="sm" onClick={() => toast(`${sendReports(design.id, [student.id])}명에게 평가 리포트를 보냈어요`)}>📨 학생에게 리포트 보내기</Button>}
+          </div>
+          <div className="rounded-xl bg-white p-5 text-sm">
+            {!sc?.reportSentAt ? (
+              <p className="text-gray-500">아직 학생에게 리포트를 보내지 않았어요. 보내면 학생이 첨삭을 보고 rewriting 해서 제출해요.</p>
+            ) : (
+              <>
+                <p className="mb-3 text-gray-600">리포트 전송: {sc.reportSentAt}</p>
+                {sc.rewrite ? (
+                  <>
+                    <p className="mb-2 text-emerald-600">Rewriting 제출 완료 · {sc.rewrite.submittedAt}</p>
+                    <p className="whitespace-pre-line rounded-lg bg-gray-50 p-4 text-[15px] leading-7">{sc.rewrite.text}</p>
+                  </>
+                ) : (
+                  <p className="text-orange-500">학생이 아직 rewriting을 제출하지 않았어요.</p>
+                )}
+              </>
+            )}
           </div>
         </Well>
       )}

@@ -1,12 +1,23 @@
 export type SchoolLevel = '초' | '중' | '고'
 
+/** 서비스를 쓰는 기관 구분: 학교(선생님별 계정) / 학원(학원당 계정 하나) */
+export type Org = 'school' | 'academy'
+/** 로그인 구분 */
+export type Role = 'teacher' | 'academy' | 'student'
+
 export interface Student {
   id: string
+  /** 소속 기관. 학교와 학원의 학생·평가는 서로 보이지 않는다 */
+  org: Org
   year: number
   grade: number
   cls: number
   num: number
   name: string
+  /** 학생 로그인 아이디 (등록할 때 자동 생성) */
+  loginId: string
+  /** 학생 로그인 비밀번호 (프로토타입: 초기 비밀번호를 그대로 저장) */
+  password: string
 }
 
 export interface Teacher {
@@ -73,6 +84,8 @@ export interface Problem {
 
 export interface Design {
   id: string
+  /** 만든 기관 */
+  org: Org
   /** 선생님이 평가를 구분하기 위한 이름 (학생에게는 보이지 않음) */
   name: string
   /** 과제 조건 (필수). 주제는 학생 결과물에 과제 이름으로 쓰인다 */
@@ -117,6 +130,9 @@ export interface Submission {
   /** 학생 답안 텍스트 (OCR 인식 결과 또는 선생님이 직접 입력한 내용) */
   text?: string
   textSource?: 'ocr' | 'typed'
+  /** 학생이 직접 타이핑해 제출했는지, 선생님이 올리거나 입력했는지 */
+  submittedBy?: 'student' | 'teacher'
+  submittedAt?: string
 }
 
 export type TextColor = 'red' | 'blue' | 'black'
@@ -157,6 +173,10 @@ export interface StudentScore {
   correction?: CorrectionSentence[]
   seteuk?: Seteuk
   done: boolean
+  /** 선생님이 평가 리포트를 학생에게 보낸 시각. 있으면 학생은 첨삭을 반영해 rewriting 해야 한다 */
+  reportSentAt?: string
+  /** 학생이 첨삭을 반영해 다시 쓴 글 */
+  rewrite?: { text: string; submittedAt: string }
 }
 
 export interface GradingRun {

@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { taskTitle } from '../lib/problemGen'
-import { useStore } from '../lib/store'
+import { useOrgData, useStore } from '../lib/store'
 import { Button, Modal, inputCls, toast } from './ui'
 
 /** 기존 평가 복사 생성 */
 export function CopyModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const nav = useNavigate()
-  const { designs, copyDesign } = useStore()
+  const copyDesign = useStore((s) => s.copyDesign)
+  const { designs, org } = useOrgData()
   const [q, setQ] = useState('')
   const [sel, setSel] = useState('')
   const list = designs.filter((d) => d.status === 'saved' && (d.name + taskTitle(d) + d.ownerName).includes(q))
@@ -34,7 +35,7 @@ export function CopyModal({ open, onClose }: { open: boolean; onClose: () => voi
         </>
       }
     >
-      <p className="mb-4 text-sm text-gray-700">기존 평가의 성취기준·채점기준·점수 계산 방식을 복사하여 새 평가를 만듭니다. 평가 대상과 채점 결과는 복사되지 않습니다.</p>
+      <p className="mb-4 text-sm text-gray-700">기존 평가의 {org === 'academy' ? '과제 조건·' : '성취기준·'}채점기준·점수 계산 방식을 복사하여 새 평가를 만듭니다. 평가 대상과 채점 결과는 복사되지 않습니다.</p>
       <div className="mb-3 flex items-center justify-between text-sm">
         <span>총 {list.length}개</span>
         <input className={`${inputCls} !w-64`} placeholder="평가명 또는 과제명 입력" value={q} onChange={(e) => setQ(e.target.value)} />

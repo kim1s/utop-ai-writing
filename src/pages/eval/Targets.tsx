@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { EvalShell, useEvalParam } from '../../components/Layout'
 import { Button, Chevron, SectionHeader, Well, confirmAsync, toast } from '../../components/ui'
-import { useStore } from '../../lib/store'
+import { useOrgData, useStore } from '../../lib/store'
 import type { Student } from '../../lib/types'
 
 const groupKey = (s: Student) => `${s.grade}학년 ${s.cls}반`
@@ -15,7 +15,8 @@ function groupBy(list: Student[]): [string, Student[]][] {
 /** 평가 대상: 평가에 참여할 학생을 학급 단위/개별로 선택 */
 export default function Targets() {
   const ev = useEvalParam()
-  const { students, setTargets } = useStore()
+  const setTargets = useStore((s) => s.setTargets)
+  const { students } = useOrgData()
   const [draft, setDraft] = useState<string[] | null>(null)
   const [left, setLeft] = useState<string[]>([])
   const [right, setRight] = useState<string[]>([])

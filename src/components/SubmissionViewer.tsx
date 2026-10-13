@@ -30,13 +30,13 @@ export function SubmissionViewerModal({ open, onClose, design, student, submissi
               </select>
             )}
             <span className="truncate text-xs text-gray-500">
-              {file ? `${file.name}${file.pages ? ` · ${file.pages}쪽` : ''} · ${file.uploadedAt} 업로드` : submission.textSource === 'typed' ? '선생님이 직접 입력한 답안' : ''}
+              {file ? `${file.name}${file.pages ? ` · ${file.pages}쪽` : ''} · ${file.uploadedAt} 업로드` : submission.textSource === 'typed' ? (submission.submittedBy === 'student' ? '학생이 직접 입력한 답안' : '선생님이 직접 입력한 답안') : ''}
             </span>
           </div>
           <div className="h-[62vh] overflow-hidden rounded-lg border bg-gray-100">
             {showText ? (
               <div className="h-full overflow-y-auto bg-white p-6 text-[15px] leading-8">
-                <p className="mb-3 text-xs text-gray-500">{submission.textSource === 'typed' ? '선생님이 직접 입력한 답안입니다.' : 'OCR로 인식한 텍스트입니다. (수정은 과제물 관리 > 제출 내용에서 할 수 있어요)'}</p>
+                <p className="mb-3 text-xs text-gray-500">{submission.textSource === 'typed' ? (submission.submittedBy === 'student' ? '학생이 직접 입력해 제출한 답안입니다.' : '선생님이 직접 입력한 답안입니다.') : 'OCR로 인식한 텍스트입니다. (수정은 과제물 관리 > 제출 내용에서 할 수 있어요)'}</p>
                 <p className="whitespace-pre-line">{submission.text || '인식된 텍스트가 없습니다.'}</p>
               </div>
             ) : (

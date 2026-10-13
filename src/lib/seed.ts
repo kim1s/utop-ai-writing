@@ -1,29 +1,45 @@
 import { MIDDLE_ENGLISH } from '../data/middleEnglishAchievements'
-import type { Achievement, Criterion, Faq, LibraryItem, Notice, Student, Teacher } from './types'
+import type { Achievement, Criterion, Faq, LibraryItem, Notice, Org, Student, Teacher } from './types'
 
-export const SCHOOL_NAME = 'UTOP고등학교'
+export const SCHOOL_NAME = 'UTOP 중학교'
 export const CURRENT_YEAR = 2026
 export const SUBJECT_OPTIONS = ['국어', '수학', '영어', '통합과학', '통합사회', '과학', '사회', '도덕', '기술·가정', '정보', '음악', '미술', '체육']
 
 const FAMILY = ['김', '이', '박', '최', '정', '강', '조', '윤', '장', '임', '한', '오', '서', '신', '권']
 const GIVEN = ['하준', '서연', '민준', '지우', '도윤', '서윤', '예준', '하은', '시우', '지아', '주원', '수아', '지호', '다은', '준서', '채원', '건우', '소율', '현우', '유나', '우진', '예린', '선우', '가온', '지안', '이든', '나윤', '태윤', '시현', '하린', '재민', '아린']
 
-export function makeStudents(year: number, grade: number, cls: number, count: number): Student[] {
+/** 학생 계정 초기 비밀번호 */
+export const INITIAL_PASSWORD = '1234'
+
+const pad2 = (n: number) => String(n).padStart(2, '0')
+
+/** 학생 id: 학교는 s-, 학원은 a- 로 시작해 기관이 달라도 겹치지 않는다 */
+export const studentIdOf = (org: Org, year: number, grade: number, cls: number, num: number) => `${org === 'academy' ? 'a' : 's'}-${year}-${grade}${cls}${pad2(num)}`
+
+/** 학생 로그인 아이디: 학교 st260101 / 학원 ac260101 (학년도 두 자리 + 학년 + 반 + 번호 두 자리) */
+export const studentLoginIdOf = (org: Org, year: number, grade: number, cls: number, num: number) => `${org === 'academy' ? 'ac' : 'st'}${String(year).slice(2)}${grade}${cls}${pad2(num)}`
+
+export function makeStudents(org: Org, year: number, grade: number, cls: number, count: number): Student[] {
   return Array.from({ length: count }, (_, i) => {
     const num = i + 1
-    const seed = grade * 100 + cls * 31 + i * 7
+    const seed = grade * 100 + cls * 31 + i * 7 + (org === 'academy' ? 17 : 0)
     return {
-      id: `s-${year}-${grade}${cls}${String(num).padStart(2, '0')}`,
+      id: studentIdOf(org, year, grade, cls, num),
+      org,
       year,
       grade,
       cls,
       num,
       name: FAMILY[seed % FAMILY.length] + GIVEN[(seed * 3 + i) % GIVEN.length],
+      loginId: studentLoginIdOf(org, year, grade, cls, num),
+      password: INITIAL_PASSWORD,
     }
   })
 }
 
-export const SEED_STUDENTS: Student[] = [...makeStudents(CURRENT_YEAR, 1, 1, 30), ...makeStudents(CURRENT_YEAR, 1, 2, 28)]
+export const SEED_STUDENTS: Student[] = [...makeStudents('school', CURRENT_YEAR, 1, 1, 30), ...makeStudents('school', CURRENT_YEAR, 1, 2, 28)]
+/** 학원 데모 학생: 중1 반 2개 */
+export const SEED_ACADEMY_STUDENTS: Student[] = [...makeStudents('academy', CURRENT_YEAR, 1, 1, 12), ...makeStudents('academy', CURRENT_YEAR, 1, 2, 10)]
 
 export const SEED_TEACHERS: Teacher[] = [
   { id: 't-me', name: '김유탑', subjects: ['영어'], email: 'utop.kim@example.com' },
@@ -34,6 +50,21 @@ export const SEED_TEACHERS: Teacher[] = [
 ]
 
 export const ME = SEED_TEACHERS[0]
+
+export const ACADEMY_NAME = 'UTOP 영어학원'
+/** 학원은 선생님별 계정이 없고 학원당 계정 하나를 쓴다 */
+export const ACADEMY: Teacher = { id: 'ac-me', name: ACADEMY_NAME, subjects: ['영어'], email: 'academy@example.com' }
+
+/** 로그인 계정(프로토타입용 고정 계정). 학생 계정은 학생 등록 때 자동 생성되어 store에 있다 */
+export interface Account {
+  loginId: string
+  password: string
+  /** SEED_TEACHERS의 id 또는 ACADEMY.id */
+  accountId: string
+}
+/** 프로토타입은 선생님 한 명(ME)의 데이터만 다루므로 선생님 로그인 계정도 하나다 */
+export const TEACHER_ACCOUNTS: Account[] = [{ loginId: 'teacher1', password: INITIAL_PASSWORD, accountId: ME.id }]
+export const ACADEMY_ACCOUNTS: Account[] = [{ loginId: 'academy1', password: INITIAL_PASSWORD, accountId: ACADEMY.id }]
 
 export const SEED_NOTICES: Notice[] = [
   { id: 'n1', title: '신학기 서비스 점검 일정 및 이용 안내', date: '2026.02.02', isNew: true, body: '신학기를 맞아 서비스 점검이 진행됩니다. 점검 시간 동안에는 서비스 이용이 제한될 수 있으니 양해 부탁드립니다.\n\n- 점검 일정: 2026.02.07(토) 23:00 ~ 02.08(일) 03:00\n- 점검 내용: 서버 안정화 및 AI 채점 엔진 업데이트' },

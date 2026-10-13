@@ -1,7 +1,7 @@
 import { studentNo } from '../pages/eval/Submissions'
 import { criterionMax, designMax, resolvedScore, rowStatus } from '../lib/grading'
 import { taskTitle } from '../lib/problemGen'
-import { SCHOOL_NAME } from '../lib/seed'
+import { ACADEMY_NAME, SCHOOL_NAME } from '../lib/seed'
 import type { Design, Student, StudentScore } from '../lib/types'
 import { CorrectionView } from './CorrectionPanel'
 
@@ -31,13 +31,13 @@ export function ReportSheet({
   const diff = final != null && avg != null ? final - avg : null
   return (
     <div className="mx-auto w-full max-w-[680px] break-after-page bg-white px-12 py-10 text-[13px] text-gray-900 shadow-md print:shadow-none">
-      <div className="mb-2 flex justify-end gap-3 text-[11px] text-gray-500">{SCHOOL_NAME}<span>|</span>{studentNo(student)} {student.name}</div>
+      <div className="mb-2 flex justify-end gap-3 text-[11px] text-gray-500">{design.org === 'academy' ? ACADEMY_NAME : SCHOOL_NAME}<span>|</span>{studentNo(student)} {student.name}</div>
       <div className="border-t-4 border-brand-500 bg-brand-50/60 px-6 py-6">
         <div className="text-[13px]">{design.year}학년도 {design.semester}학기 {design.subject}</div>
         <div className="mt-2 text-[22px] font-bold">{taskTitle(design)} <span className="text-brand-600">채점 결과</span></div>
       </div>
 
-      <h4 className="mb-2 mt-7 text-xs text-gray-600">성취기준</h4>
+      {design.achievements.length > 0 && <h4 className="mb-2 mt-7 text-xs text-gray-600">성취기준</h4>}
       {design.achievements.map((a, i) => (
         <div key={i} className="mb-1.5 flex gap-4 rounded bg-gray-50 px-3 py-2"><b className="text-brand-600">{i + 1}</b><span>{a.text || a.code}</span></div>
       ))}

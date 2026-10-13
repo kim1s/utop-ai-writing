@@ -4,7 +4,7 @@ import { CopyModal, LibraryPickModal } from '../components/PickModals'
 import { PageContainer } from '../components/Layout'
 import { Badge, Button, Card, EmptyState, Select, confirmAsync, toast } from '../components/ui'
 import { CURRENT_YEAR } from '../lib/seed'
-import { useStore } from '../lib/store'
+import { useMe, useOrgData, useStore } from '../lib/store'
 
 const SEM_OPTIONS = [
   { value: '', label: '전체 학기' },
@@ -17,7 +17,9 @@ const SEM_OPTIONS = [
 
 export default function Home() {
   const nav = useNavigate()
-  const { designs, scores, submissions, runs, deleteDesign, createDesign, me } = useStore()
+  const { scores, submissions, runs, deleteDesign, createDesign } = useStore()
+  const { designs } = useOrgData()
+  const me = useMe()
   const [sem, setSem] = useState(`${CURRENT_YEAR}-1`)
   const [subject, setSubject] = useState('')
   const [addMenu, setAddMenu] = useState(false)

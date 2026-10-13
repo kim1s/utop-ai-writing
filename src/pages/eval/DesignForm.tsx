@@ -4,7 +4,7 @@ import { EvalShell } from '../../components/Layout'
 import { Button, Checkbox, Chevron, Modal, NumberInput, Radio, Select, Spinner, inputCls, toast } from '../../components/ui'
 import { criterionMax, designMax } from '../../lib/grading'
 import { CURRENT_YEAR, LEVEL_LABEL, SAMPLE_CRITERIA, SCHOOL_LEVELS, SUBJECT_OPTIONS, achievementsFor } from '../../lib/seed'
-import { useStore } from '../../lib/store'
+import { useMe, useOrgData, useStore } from '../../lib/store'
 import { emptyAchievement, emptyCriterion } from '../../lib/blank'
 import { ProblemEditor } from '../../components/ProblemEditor'
 import { generateCriteria, hasProblem } from '../../lib/problemGen'
@@ -14,14 +14,18 @@ import type { Achievement, Criterion, Design, SchoolLevel } from '../../lib/type
 
 export default function DesignForm() {
   const { evalId } = useParams()
-  const { designs, saveDesign, me } = useStore()
+  const saveDesign = useStore((s) => s.saveDesign)
+  const me = useMe()
+  const { designs } = useOrgData()
   const existing = designs.find((d) => d.id === evalId)
 
   const [d, setD] = useState<Design>(() => structuredClone(existing as Design))
   const [criteriaMode, setCriteriaMode] = useState<'manual' | 'ai'>('manual')
   const [aiBusy, setAiBusy] = useState(false)
   const [exampleOpen, setExampleOpen] = useState(false)
-  const catalog = useMemo(() => achievementsFor(d.subject, d.schoolLevel), [d.subject, d.schoolLevel])
+  // 학원: 성취기준·교과서·단원을 쓰지 않고, 과제 조건(선생님 프롬프트 기반)으로 평가를 설계한다
+  const academy = d?.org === 'academy'
+  const catalog = useMemo(() => achievementsFor(d?.subject ?? '', d?.schoolLevel ?? ''), [d?.subject, d?.schoolLevel])
 
   if (evalId && !existing) return <Navigate to="/" replace />
   const total = designMax(d)
@@ -40,20 +44,22 @@ export default function DesignForm() {
   const setCrit = (i: number, c: Criterion) => patch({ criteria: d.criteria.map((x, k) => (k === i ? c : x)) })
 
   const generateAi = () => {
-    if (!d.achievements.some((a) => a.text.trim() || a.levels.some((l) => l.text.trim()))) return toast('먼저 성취기준을 입력해 주세요')
+    if (academy) {
+      if (!hasProblem(d.problem)) return toast('먼저 과제 조건을 만들어 주세요')
+    } else if (!d.achievements.some((a) => a.text.trim() || a.levels.some((l) => l.text.trim()))) return toast('먼저 성취기준을 입력해 주세요')
     setAiBusy(true)
     setTimeout(() => {
       patch({ criteria: generateCriteria(d) })
       setCriteriaMode('manual')
       setAiBusy(false)
-      toast(hasProblem(d.problem) ? '교과서 단원·성취기준·과제 조건을 반영해 채점기준 초안을 만들었어요. 검토 후 수정해 주세요' : '교과서 단원과 성취기준을 반영해 채점기준 초안을 만들었어요. 검토 후 수정해 주세요')
+      toast(academy ? '과제 조건을 반영해 채점기준 초안을 만들었어요. 검토 후 수정해 주세요' : hasProblem(d.problem) ? '교과서 단원·성취기준·과제 조건을 반영해 채점기준 초안을 만들었어요. 검토 후 수정해 주세요' : '교과서 단원과 성취기준을 반영해 채점기준 초안을 만들었어요. 검토 후 수정해 주세요')
     }, 1800)
   }
 
   const validate = (): string | null => {
     if (!d.name.trim()) return '평가명을 입력해 주세요'
     if (!d.problem?.topic.trim()) return '과제 조건의 주제를 입력해 주세요'
-    if (!d.achievements.some((a) => a.text.trim() || a.code)) return '성취기준을 한 개 이상 입력해 주세요'
+    if (!academy && !d.achievements.some((a) => a.text.trim() || a.code)) return '성취기준을 한 개 이상 입력해 주세요'
     if (!d.criteria.length) return '채점기준을 한 개 이상 입력해 주세요'
     for (const [i, c] of d.criteria.entries()) {
       if (!c.element.trim()) return `채점기준 ${i + 1}의 채점요소를 입력해 주세요`
@@ -83,7 +89,7 @@ export default function DesignForm() {
   return (
     <EvalShell tab="design">
       <h2 className="text-xl font-semibold">평가 설계</h2>
-      <p className="mt-1 text-[13px] text-gray-600">성취기준과 채점기준, 점수 계산 방식을 입력해 주세요.</p>
+      <p className="mt-1 text-[13px] text-gray-600">{academy ? '과제 조건과 채점기준, 점수 계산 방식을 입력해 주세요.' : '성취기준과 채점기준, 점수 계산 방식을 입력해 주세요.'}</p>
 
       <div className="mt-6 rounded-2xl bg-gray-50 p-5">
         <div className="space-y-8 rounded-2xl bg-white p-6">
@@ -114,7 +120,7 @@ export default function DesignForm() {
                 <Select value={d.subject} onChange={(v) => patch({ subject: v })} className="w-full" options={(me.subjects.length ? me.subjects : SUBJECT_OPTIONS).map((x) => ({ value: x, label: x }))} />
               </div>
             </div>
-            {textbooks.length > 0 && (
+            {!academy && textbooks.length > 0 && (
               <div className="mt-4 grid grid-cols-2 gap-4 max-md:grid-cols-1">
                 <div>
                   <div className="mb-1.5 text-[13px] font-medium">교과서 <span className="font-normal text-gray-500">(선택)</span></div>
@@ -143,13 +149,13 @@ export default function DesignForm() {
             )}
             <div className="mb-1.5 mt-5 text-[13px] font-medium">공개 여부</div>
             <div className="flex gap-6">
-              <Radio name="vis" checked={d.visibility === 'school'} onChange={() => patch({ visibility: 'school' })} label="교내 공개" />
+              <Radio name="vis" checked={d.visibility === 'school'} onChange={() => patch({ visibility: 'school' })} label={academy ? '학원 내 공개' : '교내 공개'} />
               <Radio name="vis" checked={d.visibility === 'private'} onChange={() => patch({ visibility: 'private' })} label="비공개" />
             </div>
           </Step>
 
-          {/* 2 */}
-          <Step n={2} title="성취기준 입력" help="교육과정 성취기준을 검색해 선택하거나 직접 입력할 수 있어요. 성취수준(상/중/하)은 채점기준을 만드는 근거가 됩니다.">
+          {/* 2 (학원은 성취기준 없음) */}
+          {!academy && <Step n={2} title="성취기준 입력" help="교육과정 성취기준을 검색해 선택하거나 직접 입력할 수 있어요. 성취수준(상/중/하)은 채점기준을 만드는 근거가 됩니다.">
             <div className="space-y-4">
               {d.achievements.map((a, i) => {
                 const custom = a.custom ?? false
@@ -206,21 +212,21 @@ export default function DesignForm() {
               })}
             </div>
             <Button variant="soft" className="mt-3 !rounded-full" onClick={() => patch({ achievements: [...d.achievements, emptyAchievement()] })}>＋ 성취기준 추가</Button>
-          </Step>
+          </Step>}
 
-          <Step n={3} title="과제 조건" help="학생이 써야 할 글의 조건이에요. 성취기준과 교과서 단원을 바탕으로 AI가 만들어 주고, 모든 항목을 수정할 수 있어요.">
+          <Step n={academy ? 2 : 3} title="과제 조건" help={academy ? '학생이 써야 할 글의 조건이에요. 원하는 과제를 프롬프트로 입력하면 AI가 만들어 주고, 입력하지 않으면 학년에 맞는 주제가 무작위로 만들어져요. 모든 항목을 수정할 수 있어요.' : '학생이 써야 할 글의 조건이에요. 성취기준과 교과서 단원을 바탕으로 AI가 만들어 주고, 모든 항목을 수정할 수 있어요.'}>
             <ProblemEditor design={d} onChange={(problem) => patch({ problem })} />
           </Step>
 
           {/* 3 */}
-          <Step n={4} title="채점기준 입력" help="채점요소별로 점수와 그 점수에 해당하는 세부 기준을 입력해요. AI 채점은 이 채점기준을 근거로 진행됩니다.">
+          <Step n={academy ? 3 : 4} title="채점기준 입력" help="채점요소별로 점수와 그 점수에 해당하는 세부 기준을 입력해요. AI 채점은 이 채점기준을 근거로 진행됩니다.">
             <div className="mb-4 flex gap-6">
               <Radio name="cm" checked={criteriaMode === 'manual'} onChange={() => setCriteriaMode('manual')} label="직접 입력하기" />
               <Radio name="cm" checked={criteriaMode === 'ai'} onChange={() => setCriteriaMode('ai')} label="AI로 만들기" />
             </div>
             {criteriaMode === 'ai' && (
               <div className="mb-4 rounded-xl border border-brand-200 bg-brand-50/60 p-5 text-sm">
-                <p className="mb-3 text-gray-700">{hasProblem(d.problem) ? '교과서 단원 내용, 선택한 성취기준, 위에서 입력한 과제 조건을 모두 반영해 AI가 채점기준 초안을 만들어 드려요.' : '과제 조건이 비어 있으면 교과서 단원 내용과 성취기준만 반영해 AI가 채점기준 초안을 만들어 드려요.'} 만들어진 뒤에는 직접 수정할 수 있어요.</p>
+                <p className="mb-3 text-gray-700">{academy ? '위에서 입력한 과제 조건(주제·형식·필수 포함 내용·문법·분량)을 반영해 AI가 채점기준 초안을 만들어 드려요.' : hasProblem(d.problem) ? '교과서 단원 내용, 선택한 성취기준, 위에서 입력한 과제 조건을 모두 반영해 AI가 채점기준 초안을 만들어 드려요.' : '과제 조건이 비어 있으면 교과서 단원 내용과 성취기준만 반영해 AI가 채점기준 초안을 만들어 드려요.'} 만들어진 뒤에는 직접 수정할 수 있어요.</p>
                 <Button onClick={generateAi} disabled={aiBusy}>{aiBusy ? <><Spinner /> 생성 중…</> : '✨ AI로 채점기준 생성'}</Button>
               </div>
             )}
@@ -270,7 +276,7 @@ export default function DesignForm() {
           </Step>
 
           {/* 4 */}
-          <Step n={5} title="점수 계산 방식" help="채점기준 배점을 그대로 쓰거나, 원점수 구간별로 등급 환산 점수를 줄 수 있어요.">
+          <Step n={academy ? 4 : 5} title="점수 계산 방식" help="채점기준 배점을 그대로 쓰거나, 원점수 구간별로 등급 환산 점수를 줄 수 있어요.">
             <div className="mb-4 flex gap-6">
               <Radio name="sm" checked={d.scoreMode === 'raw'} onChange={() => patch({ scoreMode: 'raw' })} label="채점기준 배점 그대로 사용" />
               <Radio name="sm" checked={d.scoreMode === 'grade'} onChange={() => patch({ scoreMode: 'grade' })} label="점수 구간별 등급으로 환산" />
@@ -304,7 +310,7 @@ export default function DesignForm() {
           </Step>
 
           {/* 5 */}
-          <Step n={6} title="결시자 처리" help="과제를 제출하지 않았거나(미제출) 응시하지 않은(미응시) 학생에게 부여할 점수예요.">
+          <Step n={academy ? 5 : 6} title="결시자 처리" help="과제를 제출하지 않았거나(미제출) 응시하지 않은(미응시) 학생에게 부여할 점수예요.">
             <div className="flex items-center gap-4 text-sm">
               미제출 <NumberInput value={d.absentUnsubmitted} onChange={(v) => patch({ absentUnsubmitted: v })} className="w-20" /> 점
               <span className="ml-4">미응시</span> <NumberInput value={d.absentNonresponse} onChange={(v) => patch({ absentNonresponse: v })} className="w-20" /> 점

@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom'
 import { PageContainer, TitleBar } from '../components/Layout'
 import { Button, Card, Checkbox, Modal, toast } from '../components/ui'
 import { SCHOOL_NAME, SUBJECT_OPTIONS } from '../lib/seed'
-import { useStore } from '../lib/store'
+import { useSession } from '../lib/session'
+import { useMe, useStore } from '../lib/store'
 
 export default function MyInfo() {
-  const me = useStore((s) => s.me)
+  const me = useMe()
+  const academy = useSession((s) => s.user?.role === 'academy')
   const setMySubjects = useStore((s) => s.setMySubjects)
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState<string[]>([])
@@ -17,16 +19,20 @@ export default function MyInfo() {
       <PageContainer>
         <Card className="!p-8">
           <h2 className="text-xl font-semibold">내 정보</h2>
-          <p className="mt-1 text-[13px] text-gray-600">내 정보를 확인하고 교과를 여러 개 지정할 수 있습니다.</p>
+          <p className="mt-1 text-[13px] text-gray-600">{academy ? '학원 정보를 확인하고 교과를 지정할 수 있습니다. 학원은 선생님별 계정 없이 학원 아이디 하나를 함께 사용합니다.' : '내 정보를 확인하고 교과를 여러 개 지정할 수 있습니다.'}</p>
           <div className="mt-6 rounded-2xl bg-gray-50 p-5">
             <div className="grid grid-cols-[80px_1fr] gap-y-5 rounded-2xl bg-white p-7 text-sm">
-              <b>이름</b>
+              <b>{academy ? '학원' : '이름'}</b>
               <span className="text-gray-700">{me.name}</span>
-              <b>학교</b>
-              <span className="flex items-center gap-3 text-gray-700">
-                {SCHOOL_NAME}
-                <Link to="/school?tab=teachers" className="rounded-lg border border-brand-300 px-3 py-1 text-[13px] font-medium text-brand-600 hover:bg-brand-50">선생님 목록 ›</Link>
-              </span>
+              {!academy && (
+                <>
+                  <b>학교</b>
+                  <span className="flex items-center gap-3 text-gray-700">
+                    {SCHOOL_NAME}
+                    <Link to="/school?tab=teachers" className="rounded-lg border border-brand-300 px-3 py-1 text-[13px] font-medium text-brand-600 hover:bg-brand-50">선생님 목록 ›</Link>
+                  </span>
+                </>
+              )}
               <b>교과</b>
               <div>
                 <div className="flex flex-wrap gap-2">

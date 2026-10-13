@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link, Navigate, Outlet, useLocation, useNavigate, useNavigationType, useParams } from 'react-router-dom'
 import { useEffect, useLayoutEffect, useRef } from 'react'
+import { ROLE_LABEL, homeOf, orgOfRole, useSession } from '../lib/session'
 import { useStore } from '../lib/store'
 import { Button, FeedbackHost, confirmAsync, toast } from './ui'
 
@@ -20,24 +21,58 @@ export function AppLayout() {
 }
 
 function Header() {
-  const me = useStore((s) => s.me)
+  const user = useSession((s) => s.user)
+  const logout = useSession((s) => s.logout)
+  const student = useStore((s) => (user?.role === 'student' ? s.students.find((x) => x.id === user.accountId) : undefined))
+  const nav = useNavigate()
+  const name = user?.name ?? ''
+  const isStudent = user?.role === 'student'
+  const avatar = (
+    <>
+      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-600 text-sm text-white">{name.slice(0, 1)}</span>
+      {name} 님
+    </>
+  )
   return (
     <header className="sticky top-0 z-40 bg-white shadow-sm no-print">
       <div className="mx-auto flex h-[82px] max-w-[1100px] items-center justify-between px-6">
-        <Link to="/" aria-label="홈" className="flex flex-col leading-tight">
+        <Link to={user ? homeOf(user.role) : '/login'} aria-label="홈" className="flex flex-col leading-tight">
           <span className="whitespace-nowrap bg-gradient-to-r from-brand-600 to-blue-500 bg-clip-text text-xl font-extrabold tracking-tight text-transparent">UTOP AI Writing</span>
           <span className="text-[11px] font-medium text-gray-500">서·논술형 평가 서비스</span>
         </Link>
-        <Link to="/my-info" className="flex items-center gap-2 text-sm font-semibold text-brand-600">
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-600 text-sm text-white">{me.name.slice(0, 1)}</span>
-          {me.name} 님
-        </Link>
+        <div className="flex items-center gap-4">
+          {user && <span className="rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-medium text-brand-600">{ROLE_LABEL[user.role]}</span>}
+          {isStudent ? (
+            <span className="flex items-center gap-2 text-sm font-semibold text-brand-600">
+              {avatar}
+              {student && <span className="text-xs font-normal text-gray-500">{student.grade}학년 {student.cls}반 {student.num}번</span>}
+            </span>
+          ) : (
+            <Link to="/my-info" className="flex items-center gap-2 text-sm font-semibold text-brand-600">{avatar}</Link>
+          )}
+          <button
+            type="button"
+            className="rounded-lg border border-gray-300 px-3 py-1.5 text-[13px] font-medium text-gray-600 hover:bg-gray-50"
+            onClick={() => {
+              logout()
+              nav('/login', { replace: true })
+            }}
+          >
+            로그아웃
+          </button>
+        </div>
       </div>
     </header>
   )
 }
 
 function Footer() {
+  const role = useSession((s) => s.user?.role)
+  if (role === 'student') return <div className="mt-16 no-print" />
+  return <StaffFooter />
+}
+
+function StaffFooter() {
   const loadDemo = useStore((s) => s.loadDemo)
   const resetEmpty = useStore((s) => s.resetEmpty)
   const nav = useNavigate()
@@ -114,7 +149,9 @@ export type TabKey = (typeof TABS)[number]['key']
 
 export function useEvalParam() {
   const { evalId } = useParams()
-  return useStore((s) => s.designs.find((d) => d.id === evalId))
+  const role = useSession((s) => s.user?.role)
+  // 다른 기관(학교↔학원)의 평가 주소로 들어와도 열리지 않게 한다
+  return useStore((s) => s.designs.find((d) => d.id === evalId && d.org === orgOfRole(role)))
 }
 
 /** 평가 상세 공통 틀: 타이틀 바(선생님용 평가명) + 5개 탭 + 흰 패널 */
@@ -161,7 +198,8 @@ export function EvalShell({ tab, crumbs, children }: { tab: TabKey; crumbs?: Cru
 
 /** AI 채점 진행 시뮬레이션: 실행 중인 평가를 일정 간격으로 한 명씩 처리 */
 function useGradingTicker() {
-  const running = useStore((s) => Object.values(s.runs).some((r) => r.state === 'running'))
+  const staff = useSession((s) => s.user?.role === 'teacher' || s.user?.role === 'academy')
+  const running = useStore((s) => staff && Object.values(s.runs).some((r) => r.state === 'running'))
   const tick = useStore((s) => s.tickGrading)
   useEffect(() => {
     if (!running) return
